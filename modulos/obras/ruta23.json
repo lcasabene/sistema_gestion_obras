@@ -1,0 +1,65 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "nombre": "Tramo 1: Junín de los Andes - Pte. Malleo",
+        "descripcion": "Pavimentación finalizada",
+        "estado": "ejecutado",
+        "avance": "100%"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-71.0733, -39.9479],
+          [-71.0650, -39.9300],
+          [-71.0500, -39.9000],
+          [-71.0400, -39.8800],
+          [-71.0150, -39.8500],
+          [-70.9900, -39.8200],
+          [-70.9500, -39.8000]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "nombre": "Tramo 2: Pte. Malleo - Pilo Lil",
+        "descripcion": "Movimiento de suelo en progreso",
+        "estado": "en_ejecucion",
+        "avance": "45%"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-70.9500, -39.8000],
+          [-70.9300, -39.7500],
+          [-70.9100, -39.7000],
+          [-70.9000, -39.6500],
+          [-70.8800, -39.6000],
+          [-70.8700, -39.5500]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "nombre": "Tramo 3: Pilo Lil - Rahue",
+        "descripcion": "Proyecto aprobado, sin inicio",
+        "estado": "pendiente",
+        "avance": "0%"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-70.8700, -39.5500],
+          [-70.8800, -39.5000],
+          [-70.9000, -39.4500],
+          [-70.9200, -39.4000],
+          [-70.9300, -39.3800]
+        ]
+      }
+    }
+  ]
+}
