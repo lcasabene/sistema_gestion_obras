@@ -72,6 +72,32 @@ function tiene_acceso($modulo, $rol_actual) {
         </div>
         <?php endif; ?>
 
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-header bg-danger text-white fw-bold"><i class="bi bi-calculator"></i> Liquidaciones – Impositiva</div>
+                <div class="list-group list-group-flush">
+                    <a href="../modulos/liquidaciones/liquidaciones_listado.php" class="list-group-item list-group-item-action d-flex justify-content-between">
+                        <div><i class="bi bi-cash-stack me-2 text-danger"></i> Listado de Liquidaciones</div>
+                        <span class="badge bg-light text-dark border">Principal</span>
+                    </a>
+                    <a href="../modulos/liquidaciones/liquidacion_form.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-plus-circle me-2 text-primary"></i> Nueva Liquidación
+                    </a>
+                    <a href="../modulos/liquidaciones/exportar_sicore.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-earmark-arrow-down me-2 text-success"></i> Exportar SICORE
+                    </a>
+                    <a href="../modulos/liquidaciones/exportar_sire.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-earmark-arrow-down me-2 text-info"></i> Exportar SIRE F2004
+                    </a>
+                    <?php if ($rol_usuario === 'ADMIN'): ?>
+                    <a href="../modulos/liquidaciones/config/rg830_config.php" class="list-group-item list-group-item-action bg-light">
+                        <i class="bi bi-sliders me-2 text-warning"></i> <strong>Config RG 830</strong>
+                    </a>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
         <div class="col-md-6 col-lg-3">
             <div class="card h-100 border-0 shadow-sm">
                 <div class="card-header bg-secondary text-white fw-bold"><i class="bi bi-sliders"></i> Configuración</div>

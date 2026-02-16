@@ -1,16 +1,17 @@
 <?php
+require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/session_config.php';
 
 // Iniciar sesión de forma segura
 if (!secure_session_start()) {
-    header("Location: " . (defined('BASE_URL') ? BASE_URL : '') . "auth/login.php?expired=1");
+    header("Location: " . BASE_URL . "auth/login.php?expired=1");
     exit;
 }
 
 function require_login(): void {
     if (!is_session_valid()) {
         secure_session_destroy();
-        header("Location: " . (defined('BASE_URL') ? BASE_URL : '') . "auth/login.php?expired=1");
+        header("Location: " . BASE_URL . "auth/login.php?expired=1");
         exit;
     }
 }

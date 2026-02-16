@@ -19,14 +19,14 @@ if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
 }
 
 // Tiempo de vida de la sesión (en segundos) - reducido para hosting compartido
-$session_lifetime = 6 * 60 * 60; // 6 horas (reducido de 8 para hosting)
-ini_set('session.gc_maxlifetime', $session_lifetime);
+define('SESSION_LIFETIME', 6 * 60 * 60); // 6 horas
+ini_set('session.gc_maxlifetime', SESSION_LIFETIME);
 ini_set('session.gc_probability', 1);
 ini_set('session.gc_divisor', 100); // Limpieza más frecuente en hosting compartido
 
 // Configurar el tiempo de expiración de la cookie para hosting compartido
 session_set_cookie_params([
-    'lifetime' => $session_lifetime,
+    'lifetime' => SESSION_LIFETIME,
     'path' => '/sistema_gestion_obras/', // Ruta específita para Byhost
     'domain' => '',
     'secure' => $secure_cookie,
@@ -51,7 +51,7 @@ function secure_session_start() {
         }
         
         // Verificar tiempo de actividad
-        if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > $session_lifetime)) {
+        if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > SESSION_LIFETIME)) {
             // Sesión expirada
             session_unset();
             session_destroy();
@@ -68,7 +68,7 @@ function secure_session_start() {
 function is_session_valid() {
     return isset($_SESSION['user_id']) && 
            isset($_SESSION['last_activity']) && 
-           (time() - $_SESSION['last_activity'] < $session_lifetime);
+           (time() - $_SESSION['last_activity'] < SESSION_LIFETIME);
 }
 
 /**
