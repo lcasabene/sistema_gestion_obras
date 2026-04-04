@@ -1,5 +1,7 @@
 <?php
 // modulos/curva/curva_ver.php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 require_once __DIR__ . '/../../config/session_config.php';
 secure_session_start();
 if (!is_session_valid()) {
@@ -12,115 +14,120 @@ require_once __DIR__ . '/../../config/database.php';
 $versionId = $_GET['version_id'] ?? 0;
 if (!$versionId) die("<div class='alert alert-danger m-4'>Error: Versión no especificada.</div>");
 
-// --------------------------------------------------------------------------
-// 1. DATOS CABECERA (OBRA Y VERSIÓN)
-// --------------------------------------------------------------------------
-$sqlHead = "SELECT v.*, v.monto_presupuesto as monto_version, 
-            o.id as obra_real_id, o.denominacion, o.monto_actualizado, o.monto_original, o.anticipo_pct, e.cuit as empresa_cuit 
-            FROM curva_version v 
-            JOIN obras o ON o.id = v.obra_id 
-            LEFT JOIN empresas e ON o.empresa_id = e.id
-            WHERE v.id = ?";
-$stmt = $pdo->prepare($sqlHead);
-$stmt->execute([$versionId]);
-$cabecera = $stmt->fetch(PDO::FETCH_ASSOC);
+try {
+    // --------------------------------------------------------------------------
+    // 1. DATOS CABECERA (OBRA Y VERSIÓN)
+    // --------------------------------------------------------------------------
+    $sqlHead = "SELECT v.*, v.monto_presupuesto as monto_version, 
+                o.id as obra_real_id, o.denominacion, o.monto_actualizado, o.monto_original, o.anticipo_pct, e.cuit as empresa_cuit 
+                FROM curva_version v 
+                JOIN obras o ON o.id = v.obra_id 
+                LEFT JOIN empresas e ON o.empresa_id = e.id
+                WHERE v.id = ?";
+    $stmt = $pdo->prepare($sqlHead);
+    $stmt->execute([$versionId]);
+    $cabecera = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if (!$cabecera) die("<div class='alert alert-danger m-4'>No se encontró la versión de curva solicitada.</div>");
+    if (!$cabecera) die("<div class='alert alert-danger m-4'>No se encontró la versión de curva solicitada.</div>");
 
-// Monto base para cálculos visuales
-$montoVisualizar = ($cabecera['monto_version'] > 0) ? $cabecera['monto_version'] : (($cabecera['monto_original'] > 0) ? $cabecera['monto_original'] : $cabecera['monto_original']);
+    // Monto base para cálculos visuales
+    $montoVisualizar = ($cabecera['monto_version'] > 0) ? $cabecera['monto_version'] : (($cabecera['monto_original'] > 0) ? $cabecera['monto_original'] : $cabecera['monto_original']);
 
-// --------------------------------------------------------------------------
-// 2. LISTA DE VERSIONES (Para el selector)
-// --------------------------------------------------------------------------
-$sqlVersiones = "SELECT id, fecha_creacion, es_vigente FROM curva_version WHERE obra_id = ? ORDER BY id DESC";
-$stmtVersiones = $pdo->prepare($sqlVersiones);
-$stmtVersiones->execute([$cabecera['obra_real_id']]);
-$todasLasVersiones = $stmtVersiones->fetchAll(PDO::FETCH_ASSOC);
+    // --------------------------------------------------------------------------
+    // 2. LISTA DE VERSIONES (Para el selector)
+    // --------------------------------------------------------------------------
+    $sqlVersiones = "SELECT id, fecha_creacion, es_vigente FROM curva_version WHERE obra_id = ? ORDER BY id DESC";
+    $stmtVersiones = $pdo->prepare($sqlVersiones);
+    $stmtVersiones->execute([$cabecera['obra_real_id']]);
+    $todasLasVersiones = $stmtVersiones->fetchAll(PDO::FETCH_ASSOC);
 
-// --------------------------------------------------------------------------
-// 3. PLANIFICACIÓN (ITEMS CURVA)
-// --------------------------------------------------------------------------
-$sqlItems = "SELECT * FROM curva_items 
-             WHERE version_id = ? 
-             ORDER BY 
-                CASE WHEN concepto LIKE '%nticipo%' THEN 0 ELSE 1 END ASC,
-                periodo ASC, 
-                id ASC";
-$stmtI = $pdo->prepare($sqlItems);
-$stmtI->execute([$versionId]);
-$itemsCurva = $stmtI->fetchAll(PDO::FETCH_ASSOC);
+    // --------------------------------------------------------------------------
+    // 3. PLANIFICACIÓN (ITEMS CURVA)
+    // --------------------------------------------------------------------------
+    $sqlItems = "SELECT * FROM curva_items 
+                 WHERE version_id = ? 
+                 ORDER BY 
+                    CASE WHEN concepto LIKE '%nticipo%' THEN 0 ELSE 1 END ASC,
+                    periodo ASC, 
+                    id ASC";
+    $stmtI = $pdo->prepare($sqlItems);
+    $stmtI->execute([$versionId]);
+    $itemsCurva = $stmtI->fetchAll(PDO::FETCH_ASSOC);
 
-// Extraemos los IDs para búsqueda eficiente
-$idsItems = array_column($itemsCurva, 'id');
-$idsString = !empty($idsItems) ? implode(',', array_map('intval', $idsItems)) : '0';
+    // Extraemos los IDs para búsqueda eficiente
+    $idsItems = array_column($itemsCurva, 'id');
+    $idsString = !empty($idsItems) ? implode(',', array_map('intval', $idsItems)) : '0';
 
-// --------------------------------------------------------------------------
-// 4. CERTIFICADOS REALES (LÓGICA POR ID DE VINCULACIÓN)
-// --------------------------------------------------------------------------
-$mapaCertificados = []; 
-$ultimoPeriodoReal = null; 
+    // --------------------------------------------------------------------------
+    // 4. CERTIFICADOS REALES (LÓGICA POR ID DE VINCULACIÓN)
+    // --------------------------------------------------------------------------
+    $mapaCertificados = []; 
+    $ultimoPeriodoReal = null; 
 
-if (!empty($idsItems)) {
-    // Buscamos certificados vinculados estrictamente a estos items
-    $sqlCerts = "SELECT * FROM certificados 
-                 WHERE estado != 'ANULADO' 
-                 AND curva_item_id IN ($idsString) 
-                 ORDER BY nro_certificado ASC";
-    
-    $stmtC = $pdo->query($sqlCerts);
-    while ($row = $stmtC->fetch(PDO::FETCH_ASSOC)) {
-        // Agrupamos: [ID_ITEM] => [TIPO] => [Lista]
-        $mapaCertificados[$row['curva_item_id']][$row['tipo']][] = $row;
+    if (!empty($idsItems)) {
+        // Buscamos certificados vinculados estrictamente a estos items
+        $sqlCerts = "SELECT * FROM certificados 
+                     WHERE estado != 'ANULADO' 
+                     AND curva_item_id IN ($idsString) 
+                     ORDER BY nro_certificado ASC";
         
-        // Guardamos la última fecha real registrada para el corte del gráfico
-        $per = substr($row['periodo'], 0, 7);
-        if ($ultimoPeriodoReal === null || $per > $ultimoPeriodoReal) {
-            $ultimoPeriodoReal = $per;
+        $stmtC = $pdo->query($sqlCerts);
+        while ($row = $stmtC->fetch(PDO::FETCH_ASSOC)) {
+            // Agrupamos: [ID_ITEM] => [TIPO] => [Lista]
+            $mapaCertificados[$row['curva_item_id']][$row['tipo']][] = $row;
+            
+            // Guardamos la última fecha real registrada para el corte del gráfico
+            $per = substr($row['periodo'], 0, 7);
+            if ($ultimoPeriodoReal === null || $per > $ultimoPeriodoReal) {
+                $ultimoPeriodoReal = $per;
+            }
         }
     }
-}
 
-// Helpers de Formato
-function fmtM($v) { return number_format((float)$v, 2, ',', '.'); }
-function fmtPct($v) { return number_format((float)$v, 2, ',', '.') . '%'; }
-function fmtFri($v) { return number_format((float)$v, 4, ',', '.'); }
+    // Helpers de Formato
+    function fmtM($v) { return number_format((float)$v, 2, ',', '.'); }
+    function fmtPct($v) { return number_format((float)$v, 2, ',', '.') . '%'; }
+    function fmtFri($v) { return number_format((float)$v, 4, ',', '.'); }
 
-// --------------------------------------------------------------------------
-// 5. DATOS PARA GRÁFICO
-// --------------------------------------------------------------------------
-$labels = []; $dataPlan = []; $dataReal = []; 
-$acumPlan = 0; $acumReal = 0;
+    // --------------------------------------------------------------------------
+    // 5. DATOS PARA GRÁFICO
+    // --------------------------------------------------------------------------
+    $labels = []; $dataPlan = []; $dataReal = []; 
+    $acumPlan = 0; $acumReal = 0;
 
-foreach ($itemsCurva as $i) {
-    if (stripos($i['concepto'], 'anticipo') !== false) continue; // Ignoramos anticipo
+    foreach ($itemsCurva as $i) {
+        if (stripos($i['concepto'], 'anticipo') !== false) continue; // Ignoramos anticipo
 
-    $per = date('Y-m', strtotime($i['periodo']));
-    $labels[] = date('m/y', strtotime($i['periodo']));
-    
-    // 1. Acumulado Planificado (Siempre se muestra hasta el final)
-    $acumPlan += $i['porcentaje_fisico'];
-    $dataPlan[] = $acumPlan;
-    
-    // 2. Acumulado Real (Cálculo)
-    $avanceItem = 0;
-    if (isset($mapaCertificados[$i['id']]['ORDINARIO'])) {
-        foreach ($mapaCertificados[$i['id']]['ORDINARIO'] as $c) {
-            $avanceItem += $c['avance_fisico_mensual'];
+        $per = date('Y-m', strtotime($i['periodo']));
+        $labels[] = date('m/y', strtotime($i['periodo']));
+        
+        // 1. Acumulado Planificado (Siempre se muestra hasta el final)
+        $acumPlan += $i['porcentaje_fisico'];
+        $dataPlan[] = $acumPlan;
+        
+        // 2. Acumulado Real (Cálculo)
+        $avanceItem = 0;
+        if (isset($mapaCertificados[$i['id']]['ORDINARIO'])) {
+            foreach ($mapaCertificados[$i['id']]['ORDINARIO'] as $c) {
+                $avanceItem += $c['avance_fisico_mensual'];
+            }
+        }
+        $acumReal += $avanceItem;
+
+        // 3. Lógica de Corte (CORREGIDA)
+        // Solo agregamos el dato al array si existe un "último periodo real" 
+        // y el periodo actual es menor o igual a ese último.
+        // De lo contrario, enviamos null para que la línea se corte.
+        if ($ultimoPeriodoReal && $per <= $ultimoPeriodoReal) {
+            $dataReal[] = $acumReal;
+        } else {
+            $dataReal[] = null; 
         }
     }
-    $acumReal += $avanceItem;
-
-    // 3. Lógica de Corte (CORREGIDA)
-    // Solo agregamos el dato al array si existe un "último periodo real" 
-    // y el periodo actual es menor o igual a ese último.
-    // De lo contrario, enviamos null para que la línea se corte.
-    if ($ultimoPeriodoReal && $per <= $ultimoPeriodoReal) {
-        $dataReal[] = $acumReal;
-    } else {
-        $dataReal[] = null; 
-    }
+} catch (PDOException $e) {
+    die("<div class='alert alert-danger m-4'><strong>Error SQL:</strong> " . htmlspecialchars($e->getMessage()) . "<br><small>Ejecute <code>sql/05_curva_v2_upgrade.sql</code> en esta BD.</small></div>");
 }
+
 ?>
 
 <!DOCTYPE html>

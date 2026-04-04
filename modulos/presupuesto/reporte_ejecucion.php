@@ -21,34 +21,31 @@ include __DIR__ . '/../../public/_header.php';
 // 2. LÓGICA DE DATOS
 // ---------------------------------------------------------
 
-// A. Filtro de fecha
+// A. Filtros
 $fecha_corte = $_GET['fecha_corte'] ?? date('Y-m-01');
+$anio_filtro = date('Y', strtotime($fecha_corte));
+$modo = $_GET['modo'] ?? 'presupuestario'; // presupuestario | financiero
 
-// B. Consulta SQL
-// CAMBIOS: 
-// 1. Traemos 'monto_disp' explícitamente.
-// 2. Corregimos el JOIN de presupuesto a 'pe.obra_id' (según lo hablado anteriormente).
+// B. Consulta SQL - Valores de la curva vigente (incluye anticipos)
 $sql = "SELECT 
             o.id, 
             o.denominacion, 
-            pe.monto_def,   -- Para referencia
-            pe.monto_disp,  -- Para validación (semáforo rojo)
-            pe.fufi,
             ci.periodo as fecha, 
-            (COALESCE(ci.monto_base, 0) + COALESCE(ci.redeterminacion, 0)) as monto_proyectado
+            ci.concepto,
+            COALESCE(ci.monto_base, 0) as monto_base,
+            COALESCE(ci.redeterminacion, 0) as redeterminacion,
+            (COALESCE(ci.monto_base, 0) + COALESCE(ci.redeterminacion, 0)) as monto_presupuestario,
+            COALESCE(ci.neto, 0) as monto_financiero
         FROM obras o
         
-        -- 1. Presupuesto (Usamos obra_id para vincular correctamente)
-        LEFT JOIN presupuesto_ejecucion pe 
-            ON o.id = pe.id
-            
-        -- 2. Curva Versión (Vigente)
+        -- 1. Curva Versión (Vigente)
         LEFT JOIN curva_version cv 
             ON o.id = cv.obra_id AND cv.es_vigente = 1
             
-        -- 3. Items de la Curva
+        -- 2. Items de la Curva (incluye anticipos)
         LEFT JOIN curva_items ci 
-            ON cv.id = ci.version_id AND ci.periodo >= :fecha_corte
+            ON cv.id = ci.version_id 
+            AND ci.periodo >= :fecha_corte
             
         WHERE o.activo = 1 
         ORDER BY o.denominacion ASC, ci.periodo ASC";
@@ -62,7 +59,7 @@ try {
     $resultados = [];
 }
 
-// C. Procesamiento (Pivote)
+// C. Procesamiento (Pivote por Obra)
 $obras = [];
 $todos_los_meses = [];
 
@@ -72,9 +69,6 @@ foreach ($resultados as $fila) {
     if (!isset($obras[$id])) {
         $obras[$id] = [
             'denominacion' => $fila['denominacion'],
-            'monto_def'    => $fila['monto_def'] ?? 0,
-            'monto_disp'   => $fila['monto_disp'] ?? 0, // Guardamos el disponible real
-            'fufi'         => $fila['fufi'] ?? '',
             'proyecciones' => [] 
         ];
     }
@@ -86,7 +80,12 @@ foreach ($resultados as $fila) {
             $obras[$id]['proyecciones'][$mes_clave] = 0;
         }
         
-        $obras[$id]['proyecciones'][$mes_clave] += $fila['monto_proyectado'];
+        // Según el modo, usamos monto_presupuestario o monto_financiero
+        $monto = ($modo === 'financiero') 
+            ? $fila['monto_financiero'] 
+            : $fila['monto_presupuestario'];
+        
+        $obras[$id]['proyecciones'][$mes_clave] += $monto;
         
         if (!in_array($mes_clave, $todos_los_meses)) {
             $todos_los_meses[] = $mes_clave;
@@ -94,6 +93,10 @@ foreach ($resultados as $fila) {
     }
 }
 sort($todos_los_meses);
+
+// Etiquetas según modo
+$modo_label = ($modo === 'financiero') ? 'Financiero (Neto)' : 'Presupuestario (Base + Redet)';
+$modo_badge_class = ($modo === 'financiero') ? 'bg-success' : 'bg-primary';
 ?>
 
 <div class="content-wrapper" style="padding: 20px;">
@@ -116,17 +119,33 @@ sort($todos_los_meses);
                     <input type="date" class="form-control" name="fecha_corte" id="fecha_corte" value="<?php echo $fecha_corte; ?>">
                 </div>
                 <div class="col-auto">
+                    <label class="form-label fw-bold">Tipo de reporte:</label>
+                    <select name="modo" class="form-select" id="selectModo">
+                        <option value="presupuestario" <?php echo ($modo === 'presupuestario') ? 'selected' : ''; ?>>Presupuestario</option>
+                        <option value="financiero" <?php echo ($modo === 'financiero') ? 'selected' : ''; ?>>Financiero</option>
+                    </select>
+                </div>
+                <div class="col-auto">
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-sync-alt"></i> Actualizar
                     </button>
                 </div>
                 <div class="col-auto ms-auto">
-                     <div class="d-flex align-items-center">
-                        <div style="width: 20px; height: 20px; background-color: #f8d7da; border: 1px solid #f5c6cb; margin-right: 10px;"></div>
-                        <span class="text-muted small">Rojo: Proyección Anual > Disponible</span>
-                     </div>
+                    <span class="badge <?php echo $modo_badge_class; ?> fs-6 py-2 px-3">
+                        <i class="fas fa-<?php echo ($modo === 'financiero') ? 'money-bill-wave' : 'file-invoice-dollar'; ?> me-1"></i>
+                        <?php echo $modo_label; ?>
+                    </span>
                 </div>
             </form>
+            <div class="mt-2">
+                <small class="text-muted">
+                    <?php if ($modo === 'financiero'): ?>
+                        <i class="fas fa-info-circle"></i> <strong>Financiero:</strong> Muestra el <em>neto</em> de cada período (bruto + redeterminación − recupero de anticipo). Refleja el flujo de caja real.
+                    <?php else: ?>
+                        <i class="fas fa-info-circle"></i> <strong>Presupuestario:</strong> Muestra <em>monto base + redeterminación</em> de cada período. Refleja el impacto bruto en el presupuesto.
+                    <?php endif; ?>
+                </small>
+            </div>
         </div>
     </div>
 
@@ -137,8 +156,7 @@ sort($todos_los_meses);
                     <thead class="table-dark">
                         <tr>
                             <th class="align-middle">Obra / Proyecto</th>
-                            <th class="align-middle text-center">FUFI</th>
-                            <th class="align-middle text-end">Monto Disponible</th>
+                            <th class="align-middle text-end">Total Proyectado</th>
                             
                             <?php foreach ($todos_los_meses as $mes): 
                                 $dt = DateTime::createFromFormat('Y-m', $mes);
@@ -150,39 +168,19 @@ sort($todos_los_meses);
                         </tr>
                     </thead>
                     <tbody>
-                        <?php 
-                        // Calculamos el año actual del filtro para la validación
-                        $anio_filtro = date('Y', strtotime($fecha_corte));
-
-                        foreach ($obras as $obra): 
-                            
-                            // LÓGICA DE VALIDACIÓN (ROJO)
-                            $suma_proyecciones_anio = 0;
-                            foreach ($obra['proyecciones'] as $mes => $monto) {
-                                // Sumamos solo si el mes pertenece al año del filtro (ej: empieza con "2026")
-                                if (strpos($mes, $anio_filtro) === 0) {
-                                    $suma_proyecciones_anio += $monto;
-                                }
-                            }
-
-                            // Si lo disponible es menor a lo proyectado para el año -> ERROR
-                            // (Manejamos posible null en monto_disp tratándolo como 0)
-                            $monto_disp = floatval($obra['monto_disp']);
-                            $es_deficit = ($monto_disp < $suma_proyecciones_anio);
-                            
-                            // Clase CSS para pintar la fila
-                            $clase_fila = $es_deficit ? 'table-danger' : '';
+                        <?php foreach ($obras as $obra): 
+                            $total_obra = array_sum($obra['proyecciones']);
                         ?>
-                        <tr class="<?php echo $clase_fila; ?>">
+                        <tr>
                             <td class="fw-bold text-primary">
                                 <?php echo htmlspecialchars($obra['denominacion']); ?>
-                                <?php if($es_deficit): ?>
-                                    <i class="fas fa-exclamation-triangle text-danger ms-1" title="Déficit: Proyección anual supera el disponible"></i>
-                                <?php endif; ?>
                             </td>
-                            <td class="text-center"><?php echo htmlspecialchars($obra['fufi']); ?></td>
-                            <td class="text-end fw-bold" title="Definitivo: $ <?php echo number_format($obra['monto_def'], 2, ',', '.'); ?>">
-                                $ <?php echo number_format($obra['monto_disp'], 2, ',', '.'); ?>
+                            <td class="text-end fw-bold">
+                                <?php if($total_obra != 0): ?>
+                                    $ <?php echo number_format($total_obra, 2, ',', '.'); ?>
+                                <?php else: ?>
+                                    <span class="text-muted small">-</span>
+                                <?php endif; ?>
                             </td>
                             
                             <?php foreach ($todos_los_meses as $mes): ?>
@@ -202,7 +200,14 @@ sort($todos_los_meses);
                     </tbody>
                     <tfoot>
                         <tr class="table-secondary fw-bold">
-                            <td colspan="3" class="text-end">TOTALES:</td>
+                            <td class="text-end">TOTALES:</td>
+                            <td class="text-end">
+                                <?php 
+                                    $gran_total = 0;
+                                    foreach ($obras as $o) { $gran_total += array_sum($o['proyecciones']); }
+                                    echo '$ ' . number_format($gran_total, 2, ',', '.');
+                                ?>
+                            </td>
                             <?php foreach ($todos_los_meses as $mes): 
                                 $sum = 0;
                                 foreach ($obras as $o) {
@@ -234,14 +239,15 @@ sort($todos_los_meses);
 
 <script>
 $(document).ready(function() {
-    var tituloReporte = 'Proyeccion_Ejecucion_' + $('#fecha_corte').val();
+    var modo = '<?php echo $modo; ?>';
+    var tituloReporte = 'Proyeccion_' + (modo === 'financiero' ? 'Financiera' : 'Presupuestaria') + '_' + $('#fecha_corte').val();
 
     $('#tablaReporte').DataTable({
         dom: 'Bfrtip',
         paging: false,
         scrollX: true,
         ordering: true,
-        order: [[0, 'asc']], // Ordenar por nombre de obra
+        order: [[0, 'asc']],
         buttons: [
             {
                 extend: 'excelHtml5',

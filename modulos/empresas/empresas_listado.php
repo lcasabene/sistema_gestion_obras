@@ -3,7 +3,6 @@
 require_once __DIR__ . '/../../auth/middleware.php';
 require_login();
 require_once __DIR__ . '/../../config/database.php';
-include __DIR__ . '/../../public/_header.php';
 
 $mensaje = '';
 $tipo_alerta = '';
@@ -43,22 +42,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
     $razon = $_POST['razon_social'];
     $cuit = preg_replace('/[^0-9]/', '', $_POST['cuit']); // Limpiar CUIT
     $prov = $_POST['codigo_proveedor'];
+    $prov2 = $_POST['codigo_proveedor_2'] ?? '';
+    $es_ute = isset($_POST['es_ute']) ? 1 : 0;
+
+    // Detectar columnas disponibles
+    $cols_empresas = [];
+    $colsStmt = $pdo->query("SHOW COLUMNS FROM empresas");
+    while ($c = $colsStmt->fetch(PDO::FETCH_ASSOC)) { $cols_empresas[] = $c['Field']; }
+    $tiene_es_ute = in_array('es_ute', $cols_empresas);
+    $tiene_prov2 = in_array('codigo_proveedor_2', $cols_empresas);
 
     try {
         if ($id > 0) {
             // UPDATE
-            $sql = "UPDATE empresas SET razon_social=?, cuit=?, codigo_proveedor=? WHERE id=?";
-            $pdo->prepare($sql)->execute([$razon, $cuit, $prov, $id]);
+            $sql = "UPDATE empresas SET razon_social=?, cuit=?, codigo_proveedor=?";
+            $params = [$razon, $cuit, $prov];
+            if ($tiene_prov2) { $sql .= ", codigo_proveedor_2=?"; $params[] = $prov2; }
+            if ($tiene_es_ute) { $sql .= ", es_ute=?"; $params[] = $es_ute; }
+            $sql .= " WHERE id=?";
+            $params[] = $id;
+            $pdo->prepare($sql)->execute($params);
             $mensaje = "Datos de la empresa actualizados.";
         } else {
             // INSERT
-            $sql = "INSERT INTO empresas (razon_social, cuit, codigo_proveedor, activo) VALUES (?, ?, ?, 1)";
-            $pdo->prepare($sql)->execute([$razon, $cuit, $prov]);
+            $campos = "razon_social, cuit, codigo_proveedor";
+            $holders = "?, ?, ?";
+            $params = [$razon, $cuit, $prov];
+            if ($tiene_prov2) { $campos .= ", codigo_proveedor_2"; $holders .= ", ?"; $params[] = $prov2; }
+            if ($tiene_es_ute) { $campos .= ", es_ute"; $holders .= ", ?"; $params[] = $es_ute; }
+            $campos .= ", activo"; $holders .= ", 1";
+            $sql = "INSERT INTO empresas ($campos) VALUES ($holders)";
+            $pdo->prepare($sql)->execute($params);
+            $id = (int)$pdo->lastInsertId();
             $mensaje = "Empresa creada correctamente.";
         }
         $tipo_alerta = "success";
+
+        // Si marcó como UTE, redirigir a composición
+        if ($es_ute && $tiene_es_ute) {
+            header("Location: empresa_ute.php?id=$id");
+            exit;
+        }
     } catch (PDOException $e) {
-        if ($e->getCode() == 23000) { // Código de error por duplicado
+        if ($e->getCode() == 23000) {
             $mensaje = "Error: El CUIT <strong>$cuit</strong> ya existe.";
             $tipo_alerta = "warning";
         } else {
@@ -68,9 +94,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
     }
 }
 
-// 3. CONSULTA LISTADO
+// 3. CONSULTA LISTADO - detectar columnas disponibles
+$has_ute_col = false;
+$has_prov2_col = false;
+try {
+    $colCheck = $pdo->query("SHOW COLUMNS FROM empresas");
+    while ($cc = $colCheck->fetch(PDO::FETCH_ASSOC)) {
+        if ($cc['Field'] === 'es_ute') $has_ute_col = true;
+        if ($cc['Field'] === 'codigo_proveedor_2') $has_prov2_col = true;
+    }
+} catch (Exception $e) {}
 $empresas = $pdo->query("SELECT * FROM empresas WHERE activo=1 ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC);
 $totalEmpresas = count($empresas);
+
+include __DIR__ . '/../../public/_header.php';
 ?>
 
 <div class="container my-4">
@@ -116,6 +153,7 @@ $totalEmpresas = count($empresas);
                             <th class="ps-3 py-3">Razón Social</th>
                             <th>CUIT</th>
                             <th>Cód. Proveedor</th>
+                            <th>Cód. Alternativo</th>
                             <th class="text-end pe-3">Acciones</th>
                         </tr>
                     </thead>
@@ -123,7 +161,12 @@ $totalEmpresas = count($empresas);
                         <?php foreach($empresas as $e): ?>
                         <tr>
                             <td class="ps-3">
-                                <div class="fw-bold text-dark fs-6"><?= htmlspecialchars($e['razon_social']) ?></div>
+                                <div class="fw-bold text-dark fs-6">
+                                    <?= htmlspecialchars($e['razon_social']) ?>
+                                    <?php if(!empty($e['es_ute'])): ?>
+                                        <span class="badge bg-warning text-dark ms-1">UTE</span>
+                                    <?php endif; ?>
+                                </div>
                             </td>
                             <td>
                                 <span class="badge bg-secondary bg-opacity-10 text-dark border border-secondary border-opacity-25 px-2 py-1 font-monospace">
@@ -137,12 +180,26 @@ $totalEmpresas = count($empresas);
                                     <span class="text-muted small">-</span>
                                 <?php endif; ?>
                             </td>
+                            <td>
+                                <?php if(!empty($e['codigo_proveedor_2'])): ?>
+                                    <span class="text-muted small"><i class="bi bi-tag me-1"></i> <?= htmlspecialchars($e['codigo_proveedor_2']) ?></span>
+                                <?php else: ?>
+                                    <span class="text-muted small">-</span>
+                                <?php endif; ?>
+                            </td>
                             <td class="text-end pe-3">
-                                <button class="btn btn-sm btn-light text-primary border shadow-sm" 
-                                        onclick="abrirModal(<?= $e['id'] ?>, '<?= htmlspecialchars($e['razon_social']) ?>', '<?= $e['cuit'] ?>', '<?= htmlspecialchars($e['codigo_proveedor'] ?? '') ?>')"
-                                        title="Editar datos">
-                                    <i class="bi bi-pencil-square"></i>
-                                </button>
+                                <div class="d-inline-flex gap-1">
+                                    <button class="btn btn-sm btn-light text-primary border shadow-sm" 
+                                            onclick="abrirModal(<?= $e['id'] ?>, '<?= htmlspecialchars($e['razon_social'], ENT_QUOTES) ?>', '<?= $e['cuit'] ?>', '<?= htmlspecialchars($e['codigo_proveedor'] ?? '', ENT_QUOTES) ?>', '<?= htmlspecialchars($e['codigo_proveedor_2'] ?? '', ENT_QUOTES) ?>', <?= (int)($e['es_ute'] ?? 0) ?>)"
+                                            title="Editar datos">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <?php if(!empty($e['es_ute'])): ?>
+                                    <a href="empresa_ute.php?id=<?= $e['id'] ?>" class="btn btn-sm btn-outline-warning border shadow-sm" title="Composición UTE">
+                                        <i class="bi bi-people-fill"></i>
+                                    </a>
+                                    <?php endif; ?>
+                                </div>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -177,9 +234,21 @@ $totalEmpresas = count($empresas);
                             <label class="form-label text-secondary">CUIT</label>
                             <input type="text" name="cuit" id="modalCuit" class="form-control font-monospace" placeholder="Sólo números" required>
                         </div>
+                        <div class="col-md-6 mb-3 d-flex align-items-end">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="es_ute" id="modalEsUte" value="1">
+                                <label class="form-check-label fw-bold" for="modalEsUte">Es UTE</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label text-secondary">Cód. Proveedor</label>
                             <input type="text" name="codigo_proveedor" id="modalProv" class="form-control" placeholder="Opcional">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label text-secondary">Cód. Alternativo</label>
+                            <input type="text" name="codigo_proveedor_2" id="modalProv2" class="form-control" placeholder="Opcional">
                         </div>
                     </div>
                 </div>
@@ -223,11 +292,13 @@ $totalEmpresas = count($empresas);
         });
     });
 
-    function abrirModal(id, razon = '', cuit = '', prov = '') {
+    function abrirModal(id, razon = '', cuit = '', prov = '', prov2 = '', esUte = 0) {
         document.getElementById('modalId').value = id;
         document.getElementById('modalRazon').value = razon;
         document.getElementById('modalCuit').value = cuit;
         document.getElementById('modalProv').value = prov;
+        document.getElementById('modalProv2').value = prov2;
+        document.getElementById('modalEsUte').checked = (esUte == 1);
         document.getElementById('modalTitulo').innerText = (id === 0) ? 'Nueva Empresa Manual' : 'Editar Empresa';
         var myModal = new bootstrap.Modal(document.getElementById('modalEmpresa'));
         myModal.show();

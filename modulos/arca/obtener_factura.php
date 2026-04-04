@@ -4,14 +4,14 @@ ob_start(); // <--- 1. AGREGA ESTO EN LA PRIMERA LÍNEA (inicia la grabación)
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../auth/middleware.php';
 
-// Columnas que DataTables va a leer (deben coincidir con el orden visual)
+// Columnas ordenables (con prefijo de tabla para evitar ambigüedad con el JOIN)
 $columns = [
-    0 => 'id',
-    1 => 'fecha',
-    2 => 'nombre_emisor',
-    3 => 'numero',
-    4 => 'importe_total',
-    5 => 'estado_uso'
+    0 => 'c.id',
+    1 => 'c.fecha',
+    2 => 'c.nombre_emisor',
+    3 => 'c.numero',
+    4 => 'c.importe_total',
+    5 => 'c.estado_uso'
 ];
 
 // 1. Obtener total general de registros
@@ -19,7 +19,11 @@ $stmt = $pdo->query("SELECT COUNT(*) FROM comprobantes_arca");
 $totalRecords = $stmt->fetchColumn();
 
 // 2. Preparar la consulta base
-$sql = "SELECT id, fecha, nombre_emisor, tipo_comprobante, punto_venta, numero, importe_total, estado_uso FROM comprobantes_arca";
+$sql = "SELECT c.id, c.fecha, c.nombre_emisor, c.tipo_comprobante,
+               COALESCE(t.descripcion, c.tipo_comprobante) AS tipo_descripcion,
+               c.punto_venta, c.numero, c.importe_total, c.estado_uso
+        FROM comprobantes_arca c
+        LEFT JOIN tipos_comprobante_arca t ON t.codigo = LPAD(c.tipo_comprobante, 3, '0')";
 $whereSql = "";
 $params = [];
 
@@ -27,9 +31,9 @@ $params = [];
 if (!empty($_POST['search']['value'])) {
     $searchValue = $_POST['search']['value'];
     // Usamos etiquetas diferentes (:search1, :search2, :search3) para evitar conflictos
-    $whereSql = " WHERE (nombre_emisor LIKE :search1 
-                   OR numero LIKE :search2 
-                   OR importe_total LIKE :search3)";
+    $whereSql = " WHERE (c.nombre_emisor LIKE :search1 
+                   OR c.numero LIKE :search2 
+                   OR c.importe_total LIKE :search3)";
     
     $params[':search1'] = "%$searchValue%";
     $params[':search2'] = "%$searchValue%";
@@ -47,7 +51,7 @@ if (isset($_POST['order'])) {
         $orderSql = " ORDER BY $columnName $direction";
     }
 } else {
-    $orderSql = " ORDER BY id DESC"; // Orden por defecto
+    $orderSql = " ORDER BY c.id DESC"; // Orden por defecto
 }
 
 // 5. Paginación (Limit y Offset)
@@ -58,8 +62,9 @@ if (isset($_POST['length']) && $_POST['length'] != -1) {
     $limitSql = " LIMIT $limit OFFSET $offset";
 }
 
-// 6. Obtener total filtrado (para la paginación correcta cuando buscas)
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM comprobantes_arca" . $whereSql);
+// 6. Obtener total filtrado - usa el mismo FROM+JOIN para que los aliases c. funcionen
+$sqlBase = "FROM comprobantes_arca c LEFT JOIN tipos_comprobante_arca t ON t.codigo = LPAD(c.tipo_comprobante, 3, '0')";
+$stmt = $pdo->prepare("SELECT COUNT(*) " . $sqlBase . $whereSql);
 $stmt->execute($params);
 $totalRecordwithFilter = $stmt->fetchColumn();
 
@@ -78,7 +83,8 @@ foreach ($data as $row) {
     
     // Armamos el número completo: PV-Numero (Ej: 00001-12345678)
     $numeroCompleto = str_pad($row['punto_venta'], 5, "0", STR_PAD_LEFT) . "-" . $row['numero'];
-    $sub_array[] = '<small class="text-muted">'.$row['tipo_comprobante'].'</small><br>' . $numeroCompleto;
+    $tipoDesc = $row['tipo_descripcion'] ?? $row['tipo_comprobante'];
+    $sub_array[] = '<small class="text-muted">'.htmlspecialchars($tipoDesc).'</small><br><span class="font-monospace">' . $numeroCompleto.'</span>';
     
     $sub_array[] = "$ " . number_format($row['importe_total'], 2, ',', '.');
     
@@ -87,7 +93,7 @@ foreach ($data as $row) {
     $sub_array[] = "<span class='badge $badge'>{$row['estado_uso']}</span>";
     
     // Botones de acción
-    $sub_array[] = '<button class="btn btn-sm btn-primary">Ver</button>';
+    $sub_array[] = '';
     
     $dataResponse[] = $sub_array;
 }

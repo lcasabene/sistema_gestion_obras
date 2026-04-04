@@ -31,6 +31,7 @@ function parsePct($valor): float {
 $id = (int)($_POST['id'] ?? 0);
 $empresa_id = !empty($_POST['empresa_id']) ? (int)$_POST['empresa_id'] : null;
 $organismo_financiador_id = !empty($_POST['organismo_financiador_id']) ? (int)$_POST['organismo_financiador_id'] : null;
+$linea_credito_id = !empty($_POST['linea_credito_id']) ? (int)$_POST['linea_credito_id'] : null;
 
 $codigo_interno = post('codigo_interno');
 $expediente = post('expediente');
@@ -76,7 +77,7 @@ try {
     if ($id > 0) {
         // --- ACTUALIZACIÓN ---
         $sql = "UPDATE obras SET 
-            empresa_id=?, organismo_financiador_id=?, codigo_interno=?, expediente=?, denominacion=?, 
+            empresa_id=?, organismo_financiador_id=?, linea_credito_id=?, codigo_interno=?, expediente=?, denominacion=?, 
             tipo_obra_id=?, estado_obra_id=?, ubicacion=?, region=?, organismo_requirente=?, 
             titularidad_terreno=?, superficie_desarrollo=?, caracteristicas_obra=?, memoria_objetivo=?, 
             latitud=?, longitud=?, geojson_data=?, fecha_inicio=?, fecha_fin_prevista=?, plazo_dias_original=?, 
@@ -85,7 +86,7 @@ try {
             WHERE id=? AND activo=1";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
-            $empresa_id, $organismo_financiador_id, $codigo_interno, $expediente, $denominacion,
+            $empresa_id, $organismo_financiador_id, $linea_credito_id, $codigo_interno, $expediente, $denominacion,
             $tipo_obra_id, $estado_obra_id, $ubicacion, $region, $organismo_requirente,
             $titularidad_terreno, $superficie_desarrollo, $caracteristicas_obra, $memoria_objetivo,
             $latitud, $longitud, $geojson_data, $fecha_inicio, $fecha_fin_prevista, $plazo_dias_original,
@@ -95,16 +96,16 @@ try {
     } else {
         // --- INSERCIÓN ---
         $sql = "INSERT INTO obras (
-            empresa_id, organismo_financiador_id, codigo_interno, expediente, denominacion, 
+            empresa_id, organismo_financiador_id, linea_credito_id, codigo_interno, expediente, denominacion, 
             tipo_obra_id, estado_obra_id, ubicacion, region, organismo_requirente, 
             titularidad_terreno, superficie_desarrollo, caracteristicas_obra, memoria_objetivo, 
             latitud, longitud, geojson_data, fecha_inicio, fecha_fin_prevista, plazo_dias_original, 
             moneda, periodo_base, monto_original, monto_actualizado, 
             anticipo_pct, anticipo_monto, observaciones, activo
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)";
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
-            $empresa_id, $organismo_financiador_id, $codigo_interno, $expediente, $denominacion,
+            $empresa_id, $organismo_financiador_id, $linea_credito_id, $codigo_interno, $expediente, $denominacion,
             $tipo_obra_id, $estado_obra_id, $ubicacion, $region, $organismo_requirente,
             $titularidad_terreno, $superficie_desarrollo, $caracteristicas_obra, $memoria_objetivo,
             $latitud, $longitud, $geojson_data, $fecha_inicio, $fecha_fin_prevista, $plazo_dias_original,

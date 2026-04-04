@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_login();
 
 // Seguridad: Solo ADMIN puede crear usuarios
-if ($_SESSION['rol'] !== 'Admin') {
+if (!is_admin()) {
     die("Acceso denegado.");
 }
 
@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nuevo_id = $pdo->lastInsertId();
 
             // 2. Asignar Rol
-            $sqlRol = "INSERT INTO usuarios_roles (usuario_id, rol_id) VALUES (?, ?)";
+            $sqlRol = "INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)";
             $stmtRol = $pdo->prepare($sqlRol);
             $stmtRol->execute([$nuevo_id, $rol_id]);
 
@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-include __DIR__ . '/../../menu/_header.php';
+include __DIR__ . '/../../public/_header.php';
 ?>
 
 <div class="container my-5">
@@ -146,4 +146,4 @@ include __DIR__ . '/../../menu/_header.php';
     </div>
 </div>
 
-<?php include __DIR__ . '/../../menu/_footer.php'; ?>
+<?php include __DIR__ . '/../../public/_footer.php'; ?>

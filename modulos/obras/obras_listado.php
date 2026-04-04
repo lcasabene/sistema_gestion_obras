@@ -34,11 +34,11 @@ $sql = "
     o.id, o.denominacion, o.monto_actualizado, o.monto_original, o.expediente, o.fecha_fin_prevista,
     e.nombre AS estado,
     cv.id AS version_id,
-    (SELECT COALESCE(SUM(monto_neto_pagar),0) FROM certificados WHERE obra_id=o.id AND estado='APROBADO') as total_certificado,
-    (SELECT COALESCE(SUM(avance_fisico_mensual),0) FROM certificados WHERE obra_id=o.id AND estado != 'ANULADO' AND tipo != 'ANTICIPO') as avance_real_pct,
-    (SELECT GROUP_CONCAT(CONCAT('#', nro_certificado, ' (', tipo, '): ', ROUND(avance_fisico_mensual, 2), '%') SEPARATOR '\n') FROM certificados WHERE obra_id=o.id AND estado != 'ANULADO' AND tipo != 'ANTICIPO') as tooltip_avance,
-    (SELECT periodo FROM certificados WHERE obra_id=o.id AND estado != 'ANULADO' ORDER BY nro_certificado DESC LIMIT 1) as ultimo_periodo,
-    (SELECT porcentaje_fisico FROM curva_items ci WHERE ci.version_id = cv.id AND ci.periodo <= DATE_FORMAT(NOW(), '%Y-%m-01') ORDER BY ci.periodo DESC LIMIT 1) as avance_teorico_pct
+    (SELECT COALESCE(SUM(c.monto_neto_pagar),0) FROM certificados c INNER JOIN curva_items ci2 ON c.curva_item_id = ci2.id WHERE ci2.version_id = cv.id AND c.estado='APROBADO') as total_certificado,
+    (SELECT COALESCE(SUM(c.avance_fisico_mensual),0) FROM certificados c INNER JOIN curva_items ci2 ON c.curva_item_id = ci2.id WHERE ci2.version_id = cv.id AND c.estado != 'ANULADO' AND ci2.concepto NOT LIKE '%nticipo%' AND COALESCE(c.tipo,'') NOT IN ('REDETERMINACION','ANTICIPO')) as avance_real_pct,
+    (SELECT GROUP_CONCAT(CONCAT('#', c.nro_certificado, ': ', ROUND(c.avance_fisico_mensual, 2), '%') ORDER BY c.nro_certificado ASC SEPARATOR '\n') FROM certificados c INNER JOIN curva_items ci2 ON c.curva_item_id = ci2.id WHERE ci2.version_id = cv.id AND c.estado != 'ANULADO' AND ci2.concepto NOT LIKE '%nticipo%' AND COALESCE(c.tipo,'') NOT IN ('REDETERMINACION','ANTICIPO')) as tooltip_avance,
+    (SELECT c.periodo FROM certificados c INNER JOIN curva_items ci2 ON c.curva_item_id = ci2.id WHERE ci2.version_id = cv.id AND c.estado != 'ANULADO' ORDER BY c.nro_certificado DESC LIMIT 1) as ultimo_periodo,
+    (SELECT COALESCE(SUM(ci.porcentaje_fisico),0) FROM curva_items ci WHERE ci.version_id = cv.id AND ci.concepto NOT LIKE '%nticipo%' AND LEFT(ci.periodo, 7) <= (SELECT MAX(LEFT(c3.periodo, 7)) FROM certificados c3 INNER JOIN curva_items ci3 ON c3.curva_item_id = ci3.id WHERE ci3.version_id = cv.id AND c3.estado != 'ANULADO' AND ci3.concepto NOT LIKE '%nticipo%' AND COALESCE(c3.tipo,'') NOT IN ('REDETERMINACION','ANTICIPO'))) as avance_teorico_pct
   FROM obras o
   JOIN estados_obra e ON o.estado_obra_id = e.id
   LEFT JOIN curva_version cv ON (cv.obra_id = o.id AND cv.es_vigente = 1)

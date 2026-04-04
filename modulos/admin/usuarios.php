@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../config/database.php'; // Asumimos que conexion.ph
 require_login();
 
 // Seguridad: Solo ADMIN puede ver esto
-if (isset($_SESSION['rol']) && $_SESSION['rol'] !== 'ADMIN') {
+if (!is_admin()) {
     die("Acceso denegado. Se requieren permisos de Administrador.");
 }
 
@@ -14,7 +14,7 @@ include __DIR__ . '/../../public/_header.php';
 // Según tus imágenes: usuarios.id se une con usuarios_roles.usuario_id
 $sql = "SELECT u.id, u.usuario, u.nombre, u.email, u.activo, r.nombre as rol_nombre 
         FROM usuarios u 
-        LEFT JOIN usuarios_roles ur ON u.id = ur.usuario_id 
+        LEFT JOIN usuario_roles ur ON u.id = ur.usuario_id 
         LEFT JOIN roles r ON ur.rol_id = r.id 
         ORDER BY u.id ASC";
 
@@ -34,6 +34,9 @@ try {
     <div>
         <a class="btn btn-secondary me-2" href="../../public/menu.php">
             <i class="bi bi-arrow-left"></i> Volver
+        </a>
+        <a href="permisos_roles.php" class="btn btn-outline-danger me-2">
+            <i class="bi bi-shield-lock"></i> Permisos por Módulo
         </a>
         <a href="crear_usuario.php" class="btn btn-success">
             <i class="bi bi-person-plus-fill"></i> Nuevo Usuario
@@ -64,17 +67,16 @@ try {
                             <td><?= htmlspecialchars($user['nombre']) ?></td>
                             <td>
                                 <?php 
-                                // Lógica visual para los roles
-                                $badgeClass = 'bg-secondary'; // Por defecto
                                 $rol = $user['rol_nombre'] ?? 'SIN ROL';
-                                
-                                if ($rol === 'ADMIN') $badgeClass = 'bg-dark';
-                                elseif ($rol === 'PRESUPUESTO') $badgeClass = 'bg-success';
-                                elseif ($rol === 'OBRAS') $badgeClass = 'bg-primary';
-                                elseif ($rol === 'DEUDA') $badgeClass = 'bg-warning text-dark';
+                                $badgeClass = match(strtolower($rol)) {
+                                    'admin'    => 'bg-dark',
+                                    'editor'   => 'bg-primary',
+                                    'consulta' => 'bg-secondary',
+                                    default    => 'bg-light text-dark border'
+                                };
                                 ?>
                                 <span class="badge rounded-pill <?= $badgeClass ?>">
-                                    <?= $rol ?>
+                                    <?= htmlspecialchars($rol) ?>
                                 </span>
                             </td>
                             <td>
@@ -85,7 +87,7 @@ try {
                                 <?php endif; ?>
                             </td>
                             <td class="text-end pe-4">
-                                <a href="asignar_rol.php?id=<?= $user['id'] ?>" class="btn btn-sm btn-outline-secondary" title="Editar Rol">
+                                <a href="editar_usuario.php?id=<?= $user['id'] ?>" class="btn btn-sm btn-outline-primary" title="Editar usuario">
                                     <i class="bi bi-pencil-square"></i>
                                 </a>
                             </td>

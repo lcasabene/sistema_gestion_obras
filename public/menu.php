@@ -1,71 +1,196 @@
 <?php
 require_once __DIR__ . '/../auth/middleware.php';
+require_once __DIR__ . '/../config/database.php';
 require_login();
 include __DIR__ . '/_header.php';
 
-$rol_usuario = $_SESSION['rol'] ?? 'ADMIN'; 
+$roles_usuario = $_SESSION['user_roles'] ?? [];
+$es_admin = is_admin();
 
-function tiene_acceso($modulo, $rol_actual) {
-    if ($rol_actual === 'ADMIN') return true;
-    return $rol_actual === $modulo;
+function tiene_acceso_modulo($clave) {
+    return can_access_module($clave);
 }
 ?>
-<div class="container-fluid my-4">
-  
-        <div>
-            <a class="btn btn-secondary shadow-sm" href="index.php"><i class="bi bi-arrow-left"></i> Volver</a>
-        </div>
-    </div>
+
 <div class="container my-4">
-    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
-        <h2>Panel de Gestión</h2>
-        <span class="badge bg-secondary"><?= htmlspecialchars($rol_usuario) ?></span>
+    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
+        <div>
+            <h2 class="mb-0 fw-bold">Panel de Gestión</h2>
+            <small class="text-muted"><?= htmlspecialchars($_SESSION['user_nombre'] ?? '') ?></small>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <?php foreach ($roles_usuario as $r): ?>
+                <span class="badge fs-6 <?= match(strtolower($r)) {
+                    'admin'    => 'bg-dark',
+                    'editor'   => 'bg-primary',
+                    'consulta' => 'bg-secondary',
+                    default    => 'bg-secondary'
+                } ?>"><?= htmlspecialchars($r) ?></span>
+            <?php endforeach; ?>
+        </div>
     </div>
 
-    <div class="row g-4">
+    <!-- FILA 1: Módulos principales -->
+    <div class="row g-4 mb-4">
 
-        <?php if (tiene_acceso('PRESUPUESTO', $rol_usuario)): ?>
-        <div class="col-md-6 col-lg-3">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-header bg-success text-white fw-bold"><i class="bi bi-cash-stack"></i> Presupuesto</div>
-                <div class="list-group list-group-flush">
-                    <a href="../modulos/presupuesto/presupuesto.php" class="list-group-item list-group-item-action">
-                        Partidas y Créditos
-                    </a>
-                    <a href="../modulos/presupuesto/importar.php" class="list-group-item list-group-item-action">
-                        Importar Ejec.
-                    </a>
-                    <a href="../modulos/presupuesto/reporte_ejecucion.php" class="list-group-item list-group-item-action">
-                        Reporte Ejecución
-                    </a>
-                </div>
-            </div>
-        </div>
-        <?php endif; ?>
-
-        <?php if (tiene_acceso('OBRAS', $rol_usuario)): ?>
+        <?php if (tiene_acceso_modulo('obras')): ?>
         <div class="col-md-6 col-lg-4">
             <div class="card h-100 border-0 shadow-sm">
-                <div class="card-header bg-primary text-white fw-bold"><i class="bi bi-building-gear"></i> Gestión de Obras</div>
+                <div class="card-header bg-primary text-white fw-bold">
+                    <i class="bi bi-building-gear me-2"></i>Gestión de Obras
+                </div>
                 <div class="list-group list-group-flush">
-                    <a href="../modulos/obras/obras_listado.php" class="list-group-item list-group-item-action d-flex justify-content-between">
-                        <div><i class="bi bi-list-check me-2 text-primary"></i> Listado y Avance</div>
+                    <a href="../modulos/obras/obras_listado.php" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-list-check me-2 text-primary"></i>Listado y Avance</span>
                         <span class="badge bg-light text-dark border">Principal</span>
                     </a>
                     <a href="../modulos/certificados/certificados_listado.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-file-earmark-text me-2 text-success"></i> Certificados y Pagos
+                        <i class="bi bi-file-earmark-check me-2 text-success"></i>Certificados y Pagos
                     </a>
                     <a href="../modulos/empresas/empresas_listado.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-briefcase me-2 text-secondary"></i> Empresas Contratistas
+                        <i class="bi bi-briefcase me-2 text-secondary"></i>Empresas Contratistas
                     </a>
                     <a href="../modulos/curva/curva_listado.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-briefcase me-2 text-secondary"></i> Curvas
+                        <i class="bi bi-graph-up me-2 text-warning"></i>Curvas de Inversión
                     </a>
                     <a href="../modulos/vedas/vedas_listado.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-snow2 me-2 text-info"></i> Vedas y Paralizaciones
+                        <i class="bi bi-snow2 me-2 text-info"></i>Vedas y Paralizaciones
                     </a>
-                    <a href="../modulos/obras/organismos_listado.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-snow2 me-2 text-info"></i> Organismos
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (tiene_acceso_modulo('liquidaciones')): ?>
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-header bg-danger text-white fw-bold">
+                    <i class="bi bi-calculator me-2"></i>Liquidaciones – Impositiva
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="../modulos/liquidaciones/liquidaciones_listado.php" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-cash-stack me-2 text-danger"></i>Listado de Liquidaciones</span>
+                        <span class="badge bg-light text-dark border">Principal</span>
+                    </a>
+                    <a href="../modulos/liquidaciones/liquidacion_form.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-plus-circle me-2 text-primary"></i>Nueva Liquidación
+                    </a>
+                    <a href="../modulos/liquidaciones/exportar_sicore.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-earmark-arrow-down me-2 text-success"></i>Exportar SICORE
+                    </a>
+                    <a href="../modulos/liquidaciones/exportar_sire.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-earmark-arrow-down me-2 text-info"></i>Exportar SIRE F2004
+                    </a>
+                    <?php if ($es_admin): ?>
+                    <a href="../modulos/liquidaciones/config/rg830_config.php" class="list-group-item list-group-item-action bg-warning-subtle">
+                        <i class="bi bi-sliders me-2 text-warning"></i><strong>Config RG 830</strong>
+                    </a>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (tiene_acceso_modulo('presupuesto')): ?>
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-header bg-success text-white fw-bold">
+                    <i class="bi bi-cash-stack me-2"></i>Presupuesto
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="../modulos/presupuesto/presupuesto.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-layout-text-window me-2 text-success"></i>Partidas y Créditos
+                    </a>
+                    <a href="../modulos/presupuesto/importar.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-upload me-2 text-primary"></i>Importar Ejecución
+                    </a>
+                    <a href="../modulos/presupuesto/reporte_ejecucion.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-bar-chart me-2 text-warning"></i>Reporte Ejecución
+                    </a>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+    </div>
+
+    <!-- FILA 2: ARCA / SICOPRO / Configuración -->
+    <div class="row g-4">
+
+        <?php if (tiene_acceso_modulo('arca')): ?>
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-header fw-bold text-white" style="background:#6610f2">
+                    <i class="bi bi-cloud-download me-2"></i>ARCA / AFIP
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="../modulos/arca/facturas_listado.php" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-file-earmark-spreadsheet me-2 text-purple"></i>Comprobantes</span>
+                        <span class="badge bg-light text-dark border">Principal</span>
+                    </a>
+                    <a href="../modulos/arca/arca_import.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-upload me-2 text-primary"></i>Importar CSV
+                    </a>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (tiene_acceso_modulo('sicopro')): ?>
+        <div class="col-md-6 col-lg-5">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-header bg-info text-white fw-bold">
+                    <i class="bi bi-database-fill-gear me-2"></i>SICOPRO
+                </div>
+
+                <!-- Sub-sección: Anticipos -->
+                <div class="list-group-item bg-light border-0 py-1 px-3">
+                    <small class="text-muted fw-bold text-uppercase" style="font-size:.7rem">
+                        <i class="bi bi-clock-history me-1"></i>Anticipos
+                    </small>
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="../modulos/sicopro/listado_anticipos.php?tipo=TOTAL_ANTICIPADO" class="list-group-item list-group-item-action">
+                        <i class="bi bi-table me-2 text-info"></i>Total Anticipado
+                    </a>
+                    <a href="../modulos/sicopro/listado_anticipos.php?tipo=SOLICITADO" class="list-group-item list-group-item-action">
+                        <i class="bi bi-table me-2 text-info"></i>Solicitado No Anticipado
+                    </a>
+                    <a href="../modulos/sicopro/listado_anticipos.php?tipo=SIN_PAGO" class="list-group-item list-group-item-action">
+                        <i class="bi bi-table me-2 text-info"></i>Anticipado Sin Pago Prov.
+                    </a>
+                </div>
+
+                <!-- Sub-sección: Consultas -->
+                <div class="list-group-item bg-light border-0 py-1 px-3">
+                    <small class="text-muted fw-bold text-uppercase" style="font-size:.7rem">
+                        <i class="bi bi-search me-1"></i>Consultas
+                    </small>
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="../modulos/sicopro/listado_sicopro.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-database me-2 text-secondary"></i>Base SICOPRO
+                    </a>
+                    <a href="../modulos/sicopro/listado_liquidaciones.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-earmark-text me-2 text-secondary"></i>Listado Liquidaciones
+                    </a>
+                    <a href="../modulos/sicopro/listado_sigue.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-earmark-text me-2 text-secondary"></i>Listado Sigue
+                    </a>
+                </div>
+
+                <!-- Sub-sección: Contable -->
+                <div class="list-group-item bg-light border-0 py-1 px-3">
+                    <small class="text-muted fw-bold text-uppercase" style="font-size:.7rem">
+                        <i class="bi bi-journal-check me-1"></i>Contable
+                    </small>
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="../modulos/sicopro/mayor.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-book me-2 text-dark"></i>Mayor Contable
+                    </a>
+                    <a href="../modulos/sicopro/importar.php" class="list-group-item list-group-item-action bg-warning-subtle">
+                        <i class="bi bi-cloud-upload-fill me-2 text-primary"></i><strong>Importar Archivos</strong>
                     </a>
                 </div>
             </div>
@@ -74,91 +199,51 @@ function tiene_acceso($modulo, $rol_actual) {
 
         <div class="col-md-6 col-lg-4">
             <div class="card h-100 border-0 shadow-sm">
-                <div class="card-header bg-danger text-white fw-bold"><i class="bi bi-calculator"></i> Liquidaciones – Impositiva</div>
-                <div class="list-group list-group-flush">
-                    <a href="../modulos/liquidaciones/liquidaciones_listado.php" class="list-group-item list-group-item-action d-flex justify-content-between">
-                        <div><i class="bi bi-cash-stack me-2 text-danger"></i> Listado de Liquidaciones</div>
-                        <span class="badge bg-light text-dark border">Principal</span>
-                    </a>
-                    <a href="../modulos/liquidaciones/liquidacion_form.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-plus-circle me-2 text-primary"></i> Nueva Liquidación
-                    </a>
-                    <a href="../modulos/liquidaciones/exportar_sicore.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-file-earmark-arrow-down me-2 text-success"></i> Exportar SICORE
-                    </a>
-                    <a href="../modulos/liquidaciones/exportar_sire.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-file-earmark-arrow-down me-2 text-info"></i> Exportar SIRE F2004
-                    </a>
-                    <?php if ($rol_usuario === 'ADMIN'): ?>
-                    <a href="../modulos/liquidaciones/config/rg830_config.php" class="list-group-item list-group-item-action bg-light">
-                        <i class="bi bi-sliders me-2 text-warning"></i> <strong>Config RG 830</strong>
-                    </a>
-                    <?php endif; ?>
+                <div class="card-header bg-secondary text-white fw-bold">
+                    <i class="bi bi-gear-fill me-2"></i>Configuración
                 </div>
-            </div>
-        </div>
 
-        <div class="col-md-6 col-lg-3">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-header bg-secondary text-white fw-bold"><i class="bi bi-sliders"></i> Configuración</div>
+                <!-- Sub-sección: Datos maestros -->
+                <div class="list-group-item bg-light border-0 py-1 px-3">
+                    <small class="text-muted fw-bold text-uppercase" style="font-size:.7rem">
+                        <i class="bi bi-collection me-1"></i>Datos Maestros
+                    </small>
+                </div>
                 <div class="list-group list-group-flush">
+                    <a href="../modulos/obras/organismos_listado.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-bank2 me-2 text-warning"></i>Organismos Financiadores
+                    </a>
+                    <a href="../modulos/obras/regiones_listado.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-geo-alt me-2 text-success"></i>Regiones
+                    </a>
                     <a href="../modulos/fuentes/fuentes_listado.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-bank me-2"></i> Fuentes Financiamiento
+                        <i class="bi bi-bank me-2 text-primary"></i>Fuentes de Financiamiento
                     </a>
-                    <a href="../modulos/arca/arca_import.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-cloud-upload me-2 text-primary"></i> Importar ARCA
-                    </a>
-                    <a href="../modulos/arca/facturas_listado.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-receipt me-2 text-primary"></i> Facturas ARCA
-                    </a>
+                </div>
 
-                    <?php if ($rol_usuario === 'ADMIN'): ?>
-                    <a href="../modulos/admin/usuarios.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-people me-2"></i> Usuarios y Roles
-                    </a>
-                    <?php endif; ?>
+                <?php if ($es_admin): ?>
+                <!-- Sub-sección: Administración (solo Admin) -->
+                <div class="list-group-item bg-light border-0 py-1 px-3">
+                    <small class="text-muted fw-bold text-uppercase" style="font-size:.7rem">
+                        <i class="bi bi-shield-lock me-1"></i>Administración
+                    </small>
                 </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-lg-3">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-header bg-info text-white fw-bold"><i class="bi bi-database-fill-gear"></i> SICOPRO</div>
                 <div class="list-group list-group-flush">
-                    <a href="../modulos/sicopro/listado_anticipos.php?tipo=TOTAL_ANTICIPADO" class="list-group-item list-group-item-action">
-                        <i class="bi bi-table me-2"></i> Total Anticipado
+                    <a href="../modulos/admin/usuarios.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-people me-2 text-dark"></i>Usuarios y Roles
                     </a>
-                    <a href="../modulos/sicopro/listado_anticipos.php?tipo=SOLICITADO" class="list-group-item list-group-item-action">
-                        <i class="bi bi-table me-2"></i> Solicitado No Anticip.
+                    <a href="../modulos/admin/permisos_roles.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-shield-lock me-2 text-danger"></i>Permisos por Módulo
                     </a>
-                    <a href="../modulos/sicopro/listado_anticipos.php?tipo=SIN_PAGO" class="list-group-item list-group-item-action">
-                        <i class="bi bi-table me-2"></i> Anticip. Sin Pago Prov.
-                    </a>
-                    <hr class="my-0">
-                    <a href="../modulos/sicopro/listado_sicopro.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-database me-2"></i> Base SICOPRO
-                    </a>
-                    <a href="../modulos/sicopro/listado_liquidaciones.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-file-earmark-text me-2"></i> Listado Liquidaciones
-                    </a>
-                    <a href="../modulos/sicopro/listado_sigue.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-file-earmark-text me-2"></i> Listado Sigue
-                    </a>
-                    <a href="../modulos/sicopro/importar.php" class="list-group-item list-group-item-action bg-light">
-                        <i class="bi bi-cloud-upload-fill me-2 text-primary"></i> <strong>Importar Archivos</strong>
+                    <a href="../modulos/admin/modulos_admin.php" class="list-group-item list-group-item-action">
+                        <i class="bi bi-grid-3x3-gap me-2 text-primary"></i>Gestionar Módulos
                     </a>
                 </div>
+                <?php endif; ?>
+
             </div>
         </div>
-        <div class="col-md-6 col-lg-3">
-        <div class="card h-100 border-0 shadow-sm">
-            <div class="card-header bg-info text-white fw-bold"><i class="bi bi-database-fill-gear"></i>CONTABLE</div>
-            <div class="list-group list-group-flush">
-                    <a href="../modulos/sicopro/mayor.php" class="list-group-item list-group-item-action">
-                        <i class="bi bi-table me-2"></i> Mayor Contable
-                    </a>
-            </div>
-        </div>
-        </div>                
+
     </div>
 </div>
 

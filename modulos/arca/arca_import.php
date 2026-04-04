@@ -11,6 +11,7 @@ require_login();
 
 $mensaje = '';
 $tipo_alerta = '';
+$lote_id_nuevo = null;
 
 // Función para limpiar montos (1.000,00 -> 1000.00)
 function limpiarMonto($val) {
@@ -20,61 +21,69 @@ function limpiarMonto($val) {
     return (float)$val;
 }
 
+// Detectar si la columna lote_id existe
+$tiene_lote_col = false;
+try {
+    $cols = array_column($pdo->query("SHOW COLUMNS FROM comprobantes_arca")->fetchAll(), 'Field');
+    $tiene_lote_col = in_array('lote_id', $cols);
+} catch (Exception $e) {}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_arca'])) {
     if ($_FILES['csv_arca']['error'] === UPLOAD_ERR_OK) {
-        $tmpName = $_FILES['csv_arca']['tmp_name'];
-        
-        // Detectar delimitador
-        $linea1 = fgets(fopen($tmpName, 'r'));
-        $delimitador = (strpos($linea1, ';') !== false) ? ';' : ',';
-        
-        $handle = fopen($tmpName, "r");
-        
-        $fila = 0;
-        $importados = 0;
-        $duplicados = 0; // Nuevo contador
-        $errores = 0;
-        
-        // 1. SQL para VERIFICAR existencia
-        // Verificamos CUIT Emisor, Tipo, Punto Venta, Número e Importe (para estar 100% seguros)
-        $sqlCheck = "SELECT COUNT(*) FROM comprobantes_arca 
-                     WHERE cuit_emisor = :cuitE 
-                     AND tipo_comprobante = :tipo 
-                     AND punto_venta = :pv 
-                     AND numero = :nro 
-                     AND importe_total = :total";
-        $stmtCheck = $pdo->prepare($sqlCheck);
+        $tmpName  = $_FILES['csv_arca']['tmp_name'];
+        $fileName = $_FILES['csv_arca']['name'];
 
-        // 2. SQL para INSERTAR
-        $sqlInsert = "INSERT INTO comprobantes_arca 
+        // Detectar delimitador
+        $linea1     = fgets(fopen($tmpName, 'r'));
+        $delimitador = (strpos($linea1, ';') !== false) ? ';' : ',';
+
+        $handle    = fopen($tmpName, "r");
+        $importados = 0;
+        $duplicados = 0;
+        $errores    = 0;
+
+        // Crear lote de importación
+        $lote_id = null;
+        if ($tiene_lote_col) {
+            try {
+                $pdo->prepare("INSERT INTO lotes_importacion_arca (nombre_archivo, usuario, total_importados, total_duplicados, total_errores) VALUES (?, ?, 0, 0, 0)")
+                    ->execute([$fileName, $_SESSION['username'] ?? 'sistema']);
+                $lote_id = (int)$pdo->lastInsertId();
+                $lote_id_nuevo = $lote_id;
+            } catch (Exception $e) { /* tabla puede no existir aún */ }
+        }
+
+        // SQL VERIFICAR existencia
+        $stmtCheck = $pdo->prepare("SELECT COUNT(*) FROM comprobantes_arca 
+                     WHERE cuit_emisor = :cuitE AND tipo_comprobante = :tipo 
+                     AND punto_venta = :pv AND numero = :nro AND importe_total = :total");
+
+        // SQL INSERTAR (con o sin lote_id)
+        if ($lote_id) {
+            $sqlInsert = "INSERT INTO comprobantes_arca 
+                (lote_id, fecha, tipo_comprobante, punto_venta, numero, cuit_emisor, nombre_emisor, cuit_receptor, importe_neto, importe_iva, importe_total, cae) 
+                VALUES (:lote, :fecha, :tipo, :pv, :nro, :cuitE, :nomE, :cuitR, :neto, :iva, :total, :cae)";
+        } else {
+            $sqlInsert = "INSERT INTO comprobantes_arca 
                 (fecha, tipo_comprobante, punto_venta, numero, cuit_emisor, nombre_emisor, cuit_receptor, importe_neto, importe_iva, importe_total, cae) 
                 VALUES (:fecha, :tipo, :pv, :nro, :cuitE, :nomE, :cuitR, :neto, :iva, :total, :cae)";
+        }
         $stmtInsert = $pdo->prepare($sqlInsert);
 
         while (($data = fgetcsv($handle, 2000, $delimitador)) !== FALSE) {
-            $fila++;
-            
-            // Saltar encabezados
             if (stripos($data[0], 'Fecha') !== false) continue;
-            
-            // Validar columnas mínimas
             if (count($data) < 10) continue;
 
             try {
-                // --- PREPARACIÓN DE DATOS ---
-                
-                // Fecha
-                $fechaRaw = trim($data[0]);
+                $fechaRaw  = trim($data[0]);
                 if (strpos($fechaRaw, '/') !== false) {
                     $d = DateTime::createFromFormat('d/m/Y', $fechaRaw);
                     $fechaFinal = $d ? $d->format('Y-m-d') : null;
                 } else {
-                    $fechaFinal = $fechaRaw; 
+                    $fechaFinal = $fechaRaw;
                 }
+                if (!$fechaFinal) continue;
 
-                if (!$fechaFinal) continue; 
-
-                // Variables limpias para usar en Check e Insert
                 $tipo_cbte = utf8_encode($data[1]);
                 $pto_venta = (int)$data[2];
                 $numero    = $data[3];
@@ -86,60 +95,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_arca'])) {
                 $imp_total = limpiarMonto($data[29] ?? 0);
                 $cae_val   = $data[5];
 
-                // --- VERIFICACIÓN DE DUPLICADOS ---
-                $stmtCheck->execute([
-                    ':cuitE' => $cuit_emi,
-                    ':tipo'  => $tipo_cbte,
-                    ':pv'    => $pto_venta,
-                    ':nro'   => $numero,
-                    ':total' => $imp_total
-                ]);
+                $stmtCheck->execute([':cuitE'=>$cuit_emi,':tipo'=>$tipo_cbte,':pv'=>$pto_venta,':nro'=>$numero,':total'=>$imp_total]);
+                if ($stmtCheck->fetchColumn() > 0) { $duplicados++; continue; }
 
-                if ($stmtCheck->fetchColumn() > 0) {
-                    // Ya existe, saltamos esta iteración
-                    $duplicados++;
-                    continue; 
-                }
-
-                // --- INSERCIÓN ---
-                $stmtInsert->execute([
-                    ':fecha' => $fechaFinal,
-                    ':tipo'  => $tipo_cbte,
-                    ':pv'    => $pto_venta,
-                    ':nro'   => $numero,
-                    ':cuitE' => $cuit_emi,
-                    ':nomE'  => $nom_emi,
-                    ':cuitR' => $cuit_rec,
-                    ':neto'  => $imp_neto,
-                    ':iva'   => $imp_iva,
-                    ':total' => $imp_total,
-                    ':cae'   => $cae_val
-                ]);
+                $params = [':fecha'=>$fechaFinal,':tipo'=>$tipo_cbte,':pv'=>$pto_venta,':nro'=>$numero,
+                           ':cuitE'=>$cuit_emi,':nomE'=>$nom_emi,':cuitR'=>$cuit_rec,
+                           ':neto'=>$imp_neto,':iva'=>$imp_iva,':total'=>$imp_total,':cae'=>$cae_val];
+                if ($lote_id) $params[':lote'] = $lote_id;
+                $stmtInsert->execute($params);
                 $importados++;
-                
-            } catch (Exception $e) {
-                $errores++;
-            }
+
+            } catch (Exception $e) { $errores++; }
         }
         fclose($handle);
-        
-        // Mensaje final detallado
-        $mensaje = "Proceso finalizado.<br>";
+
+        // Actualizar totales del lote
+        if ($lote_id) {
+            try {
+                $pdo->prepare("UPDATE lotes_importacion_arca SET total_importados=?, total_duplicados=?, total_errores=? WHERE id=?")
+                    ->execute([$importados, $duplicados, $errores, $lote_id]);
+            } catch (Exception $e) {}
+        }
+
+        $mensaje  = "Proceso finalizado.<br>";
         $mensaje .= "<span class='text-success fw-bold'>$importados</span> nuevos comprobantes importados.<br>";
-        if ($duplicados > 0) {
-            $mensaje .= "<span class='text-warning fw-bold'>$duplicados</span> registros ya existían (omitidos).<br>";
-        }
-        if ($errores > 0) {
-            $mensaje .= "<span class='text-danger'>$errores</span> errores de formato.";
-        }
-        
+        if ($duplicados > 0) $mensaje .= "<span class='text-warning fw-bold'>$duplicados</span> ya existían (omitidos).<br>";
+        if ($errores > 0)    $mensaje .= "<span class='text-danger'>$errores</span> errores de formato.";
         $tipo_alerta = ($importados > 0) ? "success" : "warning";
-        
+
     } else {
         $mensaje = "Error al subir el archivo.";
         $tipo_alerta = "danger";
     }
 }
+
+// Mensajes desde redirect (eliminación de lote)
+if (empty($mensaje) && isset($_GET['ok'])) {
+    if ($_GET['ok'] === 'lote_eliminado') {
+        $rows = (int)($_GET['rows'] ?? 0);
+        $mensaje = "<strong>Lote eliminado correctamente.</strong> Se borraron $rows comprobantes.";
+        $tipo_alerta = "success";
+    }
+}
+if (empty($mensaje) && isset($_GET['error'])) {
+    switch ($_GET['error']) {
+        case 'tiene_vinculados':
+            $v = (int)($_GET['vinculados'] ?? 0);
+            $mensaje = "No se puede eliminar: <strong>$v comprobante(s)</strong> de este lote ya fueron usados en liquidaciones.";
+            $tipo_alerta = "warning";
+            break;
+        case 'lote_no_encontrado':
+            $mensaje = "Lote no encontrado.";
+            $tipo_alerta = "danger";
+            break;
+        default:
+            $mensaje = "Ocurrió un error al eliminar el lote.";
+            $tipo_alerta = "danger";
+    }
+}
+
+// Cargar historial de lotes
+$lotes = [];
+try {
+    $lotes = $pdo->query("
+        SELECT l.*,
+               (SELECT COUNT(*) FROM comprobantes_arca c 
+                WHERE c.lote_id = l.id AND c.estado_uso = 'VINCULADO') AS vinculados
+        FROM lotes_importacion_arca l
+        WHERE l.eliminado = 0
+        ORDER BY l.fecha_importacion DESC
+        LIMIT 30
+    ")->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {}
+
 ?>
 
 <!DOCTYPE html>
@@ -156,8 +184,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_arca'])) {
 
 <div class="container my-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3><i class="bi bi-cloud-upload"></i> Importar "Mis Comprobantes" (ARCA)</h3>
-        <a href="../../public/menu.php" class="btn btn-secondary">Volver</a>
+        <div>
+            <h3 class="mb-0"><i class="bi bi-cloud-upload"></i> Importar Comprobantes (ARCA)</h3>
+            <p class="text-muted small mb-0">Cargue el CSV descargado desde AFIP "Mis Comprobantes Recibidos"</p>
+        </div>
+        <div>
+            <a href="facturas_listado.php" class="btn btn-outline-primary me-2">
+                <i class="bi bi-table me-1"></i> Ver listado de facturas
+            </a>
+            <a href="../../public/menu.php" class="btn btn-secondary">
+                <i class="bi bi-arrow-left me-1"></i> Volver
+            </a>
+        </div>
     </div>
     
     <?php if($mensaje): ?>
@@ -184,46 +222,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_arca'])) {
         </div>
     </div>
     
-    <div class="card shadow-sm">
-        <div class="card-header bg-white fw-bold">Últimos comprobantes importados</div>
+    <?php if ($tiene_lote_col): ?>
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white fw-bold py-3">
+            <i class="bi bi-clock-history me-2 text-primary"></i> Historial de Importaciones
+        </div>
         <div class="card-body p-0">
+            <?php if (empty($lotes)): ?>
+                <p class="text-muted text-center py-4 mb-0">No hay importaciones registradas aún.</p>
+            <?php else: ?>
             <div class="table-responsive">
-                <table class="table table-striped mb-0 align-middle">
+                <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th>Fecha</th>
-                            <th>Emisor</th>
-                            <th>Comprobante</th>
-                            <th class="text-end">Neto</th>
-                            <th class="text-end">IVA</th>
-                            <th class="text-end">Total</th>
-                            <th>Estado</th>
+                            <th class="ps-3">Fecha</th>
+                            <th>Archivo</th>
+                            <th>Usuario</th>
+                            <th class="text-center">Importados</th>
+                            <th class="text-center">Duplicados</th>
+                            <th class="text-center">Vinculados</th>
+                            <th class="text-end pe-3">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php 
-                        $ultimos = $pdo->query("SELECT * FROM comprobantes_arca ORDER BY id DESC LIMIT 10")->fetchAll(PDO::FETCH_ASSOC);
-                        if(!$ultimos): ?>
-                            <tr><td colspan="7" class="text-center py-3 text-muted">No hay datos importados aún.</td></tr>
-                        <?php endif;
-                        foreach($ultimos as $c): ?>
-                        <tr>
-                            <td><?= date('d/m/Y', strtotime($c['fecha'])) ?></td>
-                            <td>
-                                <div class="fw-bold small"><?= htmlspecialchars($c['nombre_emisor']) ?></div>
-                                <div class="small text-muted"><?= $c['cuit_emisor'] ?></div>
+                        <?php foreach ($lotes as $lote): ?>
+                        <tr <?= ($lote_id_nuevo == $lote['id']) ? 'class="table-success"' : '' ?>>
+                            <td class="ps-3 text-nowrap">
+                                <?= date('d/m/Y H:i', strtotime($lote['fecha_importacion'])) ?>
                             </td>
-                            <td><?= $c['tipo_comprobante'] ?> <br> N° <?= $c['numero'] ?></td>
-                            
-                            <td class="text-end text-muted">$ <?= number_format($c['importe_neto'], 2, ',', '.') ?></td>
-                            <td class="text-end text-muted">$ <?= number_format($c['importe_iva'], 2, ',', '.') ?></td>
-                            <td class="text-end fw-bold text-dark">$ <?= number_format($c['importe_total'], 2, ',', '.') ?></td>
-                            
                             <td>
-                                <?php if($c['estado_uso']=='DISPONIBLE'): ?>
-                                    <span class="badge bg-success">Disponible</span>
+                                <span class="small font-monospace text-muted">
+                                    <i class="bi bi-file-earmark-text me-1"></i><?= htmlspecialchars($lote['nombre_archivo'] ?? '-') ?>
+                                </span>
+                            </td>
+                            <td class="small"><?= htmlspecialchars($lote['usuario'] ?? '-') ?></td>
+                            <td class="text-center">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                    <?= $lote['total_importados'] ?>
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                <?php if ($lote['total_duplicados'] > 0): ?>
+                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
+                                        <?= $lote['total_duplicados'] ?>
+                                    </span>
                                 <?php else: ?>
-                                    <span class="badge bg-secondary">Vinculado</span>
+                                    <span class="text-muted small">-</span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="text-center">
+                                <?php if ($lote['vinculados'] > 0): ?>
+                                    <span class="badge bg-secondary" title="Facturas ya usadas en liquidaciones">
+                                        <?= $lote['vinculados'] ?> vinculadas
+                                    </span>
+                                <?php else: ?>
+                                    <span class="text-muted small">ninguna</span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="text-end pe-3">
+                                <?php if ($lote['vinculados'] == 0): ?>
+                                    <button class="btn btn-sm btn-outline-danger"
+                                            onclick="confirmarEliminar(<?= $lote['id'] ?>, <?= $lote['total_importados'] ?>)"
+                                            title="Eliminar este lote y sus comprobantes">
+                                        <i class="bi bi-trash"></i> Eliminar lote
+                                    </button>
+                                <?php else: ?>
+                                    <span class="text-muted small" title="No se puede eliminar: hay facturas vinculadas a liquidaciones">
+                                        <i class="bi bi-lock"></i> Protegido
+                                    </span>
                                 <?php endif; ?>
                             </td>
                         </tr>
@@ -231,9 +297,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_arca'])) {
                     </tbody>
                 </table>
             </div>
+            <?php endif; ?>
+        </div>
+        <div class="card-footer bg-white text-muted small">
+            <i class="bi bi-info-circle me-1"></i> Solo se pueden eliminar lotes donde ninguna factura haya sido usada en una liquidación.
         </div>
     </div>
+    <?php else: ?>
+    <div class="alert alert-info shadow-sm">
+        <i class="bi bi-info-circle me-2"></i>
+        Para ver el historial de importaciones ejecute la migración <strong>07_arca_lotes.sql</strong> en la base de datos.
+    </div>
+    <?php endif; ?>
+
 </div>
+
+<form id="formEliminarLote" method="POST" action="arca_lote_eliminar.php">
+    <input type="hidden" name="lote_id" id="inputLoteId">
+</form>
+
+<script>
+function confirmarEliminar(loteId, cantidad) {
+    if (confirm('¿Está seguro de eliminar este lote?\n\nSe eliminarán ' + cantidad + ' comprobantes importados.\nEsta acción no se puede deshacer.')) {
+        document.getElementById('inputLoteId').value = loteId;
+        document.getElementById('formEliminarLote').submit();
+    }
+}
+</script>
 
 <?php include __DIR__ . '/../../public/_footer.php'; ?>
 

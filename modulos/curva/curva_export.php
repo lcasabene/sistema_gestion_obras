@@ -26,17 +26,16 @@ $stmtI = $pdo->prepare("SELECT * FROM curva_items WHERE version_id = ? ORDER BY 
 $stmtI->execute([$versionId]);
 $items = $stmtI->fetchAll(PDO::FETCH_ASSOC);
 
-// 3. Obtener Certificados (Datos Reales) - NUEVO
-$sqlCerts = "SELECT * FROM certificados WHERE obra_id = ? AND estado != 'ANULADO' ORDER BY periodo ASC";
-$stmtC = $pdo->prepare($sqlCerts);
-$stmtC->execute([$cabecera['obra_real_id']]);
-$certificadosDB = $stmtC->fetchAll(PDO::FETCH_ASSOC);
-
-// Mapear certificados por periodo (YYYY-MM)
+// 3. Obtener Certificados vinculados a ESTA versión (por curva_item_id)
+$idsItems = array_column($items, 'id');
 $mapaCertificados = [];
-foreach ($certificadosDB as $c) {
-    $periodo = substr($c['periodo'], 0, 7); // "2025-01"
-    $mapaCertificados[$periodo][$c['tipo']][] = $c;
+if (!empty($idsItems)) {
+    $idsString = implode(',', array_map('intval', $idsItems));
+    $sqlCerts = "SELECT * FROM certificados WHERE estado != 'ANULADO' AND curva_item_id IN ($idsString) ORDER BY nro_certificado ASC";
+    $stmtC = $pdo->query($sqlCerts);
+    while ($c = $stmtC->fetch(PDO::FETCH_ASSOC)) {
+        $mapaCertificados[$c['curva_item_id']][$c['tipo']][] = $c;
+    }
 }
 
 // 4. Forzar descarga Excel
@@ -89,30 +88,26 @@ function fmtFri($n) { return number_format((float)$n, 4, ',', '.'); }
         </thead>
         <tbody>
             <?php foreach($items as $item): 
-                $per = date('Y-m', strtotime($item['periodo']));
+                $itemId = $item['id'];
+                $esPlanAnticipo = (stripos($item['concepto'], 'anticipo') !== false);
                 
-                // Calcular datos REALES para este periodo
+                // Calcular datos REALES para este item (por curva_item_id)
                 $realFisico = 0;
                 $realBasico = 0;
                 $realRedet = 0;
 
-                // Sumar Ordinarios y Anticipos (Básico)
-                if(isset($mapaCertificados[$per]['ORDINARIO'])) {
-                    foreach($mapaCertificados[$per]['ORDINARIO'] as $c) {
+                // Sumar Ordinarios o Anticipos según tipo de item
+                $tipoPrincipal = $esPlanAnticipo ? 'ANTICIPO' : 'ORDINARIO';
+                if(isset($mapaCertificados[$itemId][$tipoPrincipal])) {
+                    foreach($mapaCertificados[$itemId][$tipoPrincipal] as $c) {
                         $realFisico += $c['avance_fisico_mensual'];
-                        $realBasico += $c['monto_basico'];
-                    }
-                }
-                if(isset($mapaCertificados[$per]['ANTICIPO'])) {
-                    foreach($mapaCertificados[$per]['ANTICIPO'] as $c) {
-                        // El anticipo suma dinero pero no avance físico
-                        $realBasico += $c['monto_bruto']; 
+                        $realBasico += $c['monto_bruto'];
                     }
                 }
 
                 // Sumar Redeterminaciones
-                if(isset($mapaCertificados[$per]['REDETERMINACION'])) {
-                    foreach($mapaCertificados[$per]['REDETERMINACION'] as $c) {
+                if(isset($mapaCertificados[$itemId]['REDETERMINACION'])) {
+                    foreach($mapaCertificados[$itemId]['REDETERMINACION'] as $c) {
                         $realRedet += $c['monto_redeterminado'];
                     }
                 }
@@ -127,7 +122,7 @@ function fmtFri($n) { return number_format((float)$n, 4, ',', '.'); }
                 <td class="num"><?= fmt($item['monto_base']) ?></td>
                 <td align="center"><?= fmtFri($item['fri']) ?></td>
                 <td class="num"><?= fmt($item['redeterminacion']) ?></td>
-                <td class="num" style="background-color: #e2e3e5; font-weight:bold;"><?= $realTotal ?></td>
+                <td class="num" style="background-color: #e2e3e5; font-weight:bold;"><?= fmt($item['monto_base'] + $item['redeterminacion']) ?></td>
 
                 <td class="pct" style="color: #198754; font-weight:bold;"><?= ($realFisico > 0) ? fmt($realFisico).'%' : '-' ?></td>
                 <td class="num"><?= ($realBasico != 0) ? fmt($realBasico) : '-' ?></td>

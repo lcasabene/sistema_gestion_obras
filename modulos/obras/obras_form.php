@@ -35,7 +35,9 @@ $obra = [
   'observaciones' => '',
   'latitud' => '',
   'longitud' => '',
-  'geojson_data' => ''
+  'geojson_data' => '',
+  'organismo_financiador_id' => null,
+  'linea_credito_id' => null
 ];
 
 $partida = [
@@ -69,6 +71,15 @@ $tipos = $pdo->query("SELECT id, nombre FROM tipos_obra WHERE activo=1 ORDER BY 
 $estados = $pdo->query("SELECT id, nombre FROM estados_obra WHERE activo=1 ORDER BY nombre")->fetchAll();
 $empresas = $pdo->query("SELECT id, razon_social, cuit FROM empresas WHERE activo=1 ORDER BY razon_social ASC")->fetchAll();
 $todas_fuentes = $pdo->query("SELECT id, codigo, nombre FROM fuentes_financiamiento WHERE activo=1 ORDER BY codigo ASC")->fetchAll();
+
+$organismos = [];
+try { $organismos = $pdo->query("SELECT id, nombre_organismo FROM organismos_financiadores WHERE activo=1 ORDER BY nombre_organismo")->fetchAll(); } catch (Exception $e) {}
+
+$lineas_credito = [];
+try { $lineas_credito = $pdo->query("SELECT id, organismo_id, codigo, descripcion FROM lineas_credito WHERE activo=1 ORDER BY codigo")->fetchAll(PDO::FETCH_ASSOC); } catch (Exception $e) {}
+
+$regiones = [];
+try { $regiones = $pdo->query("SELECT id, nombre FROM regiones WHERE activo=1 ORDER BY nombre")->fetchAll(); } catch (Exception $e) {}
 
 include __DIR__ . '/../../public/_header.php';
 ?>
@@ -133,6 +144,25 @@ include __DIR__ . '/../../public/_header.php';
             </select>
           </div>
 
+          <div class="col-md-4">
+            <label class="form-label small fw-bold">Organismo Financiador</label>
+            <select name="organismo_financiador_id" id="selectOrganismo" class="form-select">
+                <option value="">Seleccione...</option>
+                <?php foreach($organismos as $org): ?>
+                    <option value="<?= (int)$org['id'] ?>" <?= ((int)($obra['organismo_financiador_id'] ?? 0)==(int)$org['id'])?'selected':'' ?>><?= htmlspecialchars($org['nombre_organismo']) ?></option>
+                <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label small fw-bold">Línea de Crédito</label>
+            <select name="linea_credito_id" id="selectLineaCredito" class="form-select">
+                <option value="">Seleccione...</option>
+                <?php foreach($lineas_credito as $lc): ?>
+                    <option value="<?= (int)$lc['id'] ?>" data-organismo="<?= (int)$lc['organismo_id'] ?>" <?= ((int)($obra['linea_credito_id'] ?? 0)==(int)$lc['id'])?'selected':'' ?>><?= htmlspecialchars($lc['codigo'] . ' - ' . ($lc['descripcion'] ?? '')) ?></option>
+                <?php endforeach; ?>
+            </select>
+          </div>
+
           <div class="col-md-3">
             <label class="form-label small fw-bold">Tipo de obra *</label>
             <select name="tipo_obra_id" class="form-select" required>
@@ -161,8 +191,8 @@ include __DIR__ . '/../../public/_header.php';
             <label class="form-label small fw-bold">Región</label>
             <select name="region" class="form-select">
                 <option value="">Seleccione...</option>
-                <?php foreach(['Alto Neuquén', 'Pehuén', 'Lagos del Sur', 'Limay', 'Comarca', 'Confluencia', 'Vaca Muerta'] as $r): ?>
-                    <option value="<?= $r ?>" <?= ($obra['region'] == $r)?'selected':'' ?>><?= $r ?></option>
+                <?php foreach($regiones as $r): ?>
+                    <option value="<?= htmlspecialchars($r['nombre']) ?>" <?= ($obra['region'] == $r['nombre'])?'selected':'' ?>><?= htmlspecialchars($r['nombre']) ?></option>
                 <?php endforeach; ?>
             </select>
           </div>
@@ -369,6 +399,28 @@ $(document).ready(function() {
 
     updateFuentes();
     updateCalculos();
+
+    // ------------------------------------------
+    // FILTRO LÍNEA DE CRÉDITO POR ORGANISMO
+    // ------------------------------------------
+    var $selOrg = $('#selectOrganismo');
+    var $selLC = $('#selectLineaCredito');
+    var allLCOptions = $selLC.find('option').clone();
+
+    function filtrarLineas() {
+        var orgId = $selOrg.val();
+        var currentVal = $selLC.val();
+        $selLC.find('option:not(:first)').remove();
+        allLCOptions.each(function() {
+            if ($(this).val() === '') return;
+            if (!orgId || $(this).data('organismo') == orgId) {
+                $selLC.append($(this).clone());
+            }
+        });
+        $selLC.val(currentVal);
+    }
+    $selOrg.on('change', function() { $selLC.val(''); filtrarLineas(); });
+    filtrarLineas();
 
     // ------------------------------------------
     // LÓGICA DE MAPA (Leaflet)
