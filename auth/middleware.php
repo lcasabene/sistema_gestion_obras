@@ -72,6 +72,14 @@ function can_delete(): bool {
     return current_user_nivel() >= 3;
 }
 
+function require_can_edit(): void {
+    if (!can_edit()) { http_response_code(403); echo "Acceso denegado."; exit; }
+}
+
+function require_can_delete(): void {
+    if (!can_delete()) { http_response_code(403); echo "Acceso denegado."; exit; }
+}
+
 /**
  * Verifica si el usuario actual puede acceder a un módulo.
  * Admin siempre tiene acceso. Para otros roles consulta rol_modulos.

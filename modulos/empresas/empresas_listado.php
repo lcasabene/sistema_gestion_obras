@@ -107,6 +107,19 @@ try {
 $empresas = $pdo->query("SELECT * FROM empresas WHERE activo=1 ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC);
 $totalEmpresas = count($empresas);
 
+// 4. Cargar integrantes de todas las UTEs en una sola consulta
+$ute_integrantes = [];
+try {
+    $rows = $pdo->query("
+        SELECT u.empresa_id, u.denominacion, u.cuit, u.porcentaje
+        FROM empresa_ute_integrantes u
+        ORDER BY u.empresa_id, u.id
+    ")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as $r) {
+        $ute_integrantes[(int)$r['empresa_id']][] = $r;
+    }
+} catch (Exception $e) { /* tabla aún no existe */ }
+
 include __DIR__ . '/../../public/_header.php';
 ?>
 
@@ -159,14 +172,40 @@ include __DIR__ . '/../../public/_header.php';
                     </thead>
                     <tbody>
                         <?php foreach($empresas as $e): ?>
-                        <tr>
+                        <tr class="<?= !empty($e['es_ute']) ? 'table-warning' : '' ?>">
                             <td class="ps-3">
                                 <div class="fw-bold text-dark fs-6">
                                     <?= htmlspecialchars($e['razon_social']) ?>
                                     <?php if(!empty($e['es_ute'])): ?>
-                                        <span class="badge bg-warning text-dark ms-1">UTE</span>
+                                        <span class="badge bg-warning text-dark ms-1"><i class="bi bi-people-fill me-1"></i>UTE</span>
                                     <?php endif; ?>
                                 </div>
+                                <?php if(!empty($e['es_ute']) && !empty($ute_integrantes[$e['id']])): ?>
+                                <div class="mt-1">
+                                    <a class="text-muted small text-decoration-none" data-bs-toggle="collapse"
+                                       href="#ute-<?= $e['id'] ?>" role="button">
+                                        <i class="bi bi-chevron-down me-1" style="font-size:.7rem"></i><?= count($ute_integrantes[$e['id']]) ?> integrante<?= count($ute_integrantes[$e['id']]) > 1 ? 's' : '' ?>
+                                    </a>
+                                    <div class="collapse mt-1" id="ute-<?= $e['id'] ?>">
+                                        <ul class="list-unstyled mb-0 small">
+                                        <?php foreach($ute_integrantes[$e['id']] as $int): ?>
+                                            <li class="text-muted">
+                                                <i class="bi bi-dot"></i>
+                                                <span class="fw-semibold"><?= htmlspecialchars($int['denominacion']) ?></span>
+                                                <?php if($int['cuit']): ?>
+                                                    <span class="font-monospace text-secondary">(<?= htmlspecialchars($int['cuit']) ?>)</span>
+                                                <?php endif; ?>
+                                                <?php if($int['porcentaje'] > 0): ?>
+                                                    <span class="badge bg-warning text-dark" style="font-size:.65rem"><?= number_format($int['porcentaje'], 1) ?>%</span>
+                                                <?php endif; ?>
+                                            </li>
+                                        <?php endforeach; ?>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <?php elseif(!empty($e['es_ute'])): ?>
+                                <div class="text-muted small mt-1"><i class="bi bi-info-circle me-1"></i>Sin integrantes cargados</div>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <span class="badge bg-secondary bg-opacity-10 text-dark border border-secondary border-opacity-25 px-2 py-1 font-monospace">
@@ -278,7 +317,7 @@ include __DIR__ . '/../../public/_header.php';
             language: { url: 'https://cdn.datatables.net/plug-ins/1.13.8/i18n/es-ES.json' },
             pageLength: 10,
             order: [[0, 'asc']],
-            dom: "<'row'<'col-sm-12 col-md-6'f><'col-sm-12 col-md-6 text-end'B>>" +
+            dom: "<'row'<'col-sm-12 col-md-6'B><'col-sm-12 col-md-6'f>>" +
                  "<'row'<'col-sm-12'tr>>" +
                  "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
             buttons: [

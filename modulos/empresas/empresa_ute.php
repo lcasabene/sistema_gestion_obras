@@ -184,7 +184,14 @@ include __DIR__ . '/../../public/_header.php';
     </div>
 </div>
 
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet">
+<style>
+  .select2-container { width: 100% !important; }
+  .select2-results__option .small { font-size: .75rem; color: #888; }
+</style>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
 $(function() {
     // Opciones de empresas como template HTML
@@ -192,24 +199,61 @@ $(function() {
         return ['id' => $te['id'], 'cuit' => $te['cuit'], 'razon' => $te['razon_social']];
     }, $todas_empresas)) ?>;
 
+    function formatEmpresa(opt) {
+        if (!opt.id || !opt.element) return opt.text;
+        var cuit  = $(opt.element).data('cuit')  || '';
+        var razon = $(opt.element).data('razon') || opt.text;
+        if (!cuit) return opt.text;
+        return $('<span><span class="fw-semibold">' + $('<span>').text(razon).html() + '</span>'
+            + ' <small class="font-monospace text-muted">' + cuit + '</small></span>');
+    }
+
+    function initSelect2($el) {
+        $el.select2({
+            theme: 'bootstrap-5',
+            placeholder: '-- Buscar por CUIT o nombre --',
+            allowClear: true,
+            width: '100%',
+            templateResult: formatEmpresa,
+            templateSelection: formatEmpresa
+            /* Sin matcher personalizado: Select2 busca por el texto de la opción
+               que ya contiene CUIT – Razón Social, cubriedo ambos criterios */
+        });
+        // Al seleccionar, autocompletar CUIT y denominación
+        $el.on('select2:select', function(e) {
+            var $row = $(this).closest('tr');
+            var $opt = $(this).find('option:selected');
+            if ($opt.val()) {
+                $row.find('[name="int_cuit[]"]').val($opt.data('cuit'));
+                $row.find('[name="int_denominacion[]"]').val($opt.data('razon'));
+            }
+        });
+        $el.on('select2:clear', function() {
+            var $row = $(this).closest('tr');
+            $row.find('[name="int_cuit[]"]').val('');
+            $row.find('[name="int_denominacion[]"]').val('');
+        });
+    }
+
     function buildSelectHTML() {
-        var html = '<option value="">-- No vinculada --</option>';
+        var html = '<option value=""></option>';
         opcionesEmpresa.forEach(function(e) {
-            html += '<option value="' + e.id + '" data-cuit="' + e.cuit + '" data-razon="' + e.razon + '">' + e.cuit + ' - ' + e.razon + '</option>';
+            html += '<option value="' + e.id + '" data-cuit="' + e.cuit + '" data-razon="' + e.razon + '">' + e.cuit + ' – ' + e.razon + '</option>';
         });
         return html;
     }
 
     // Agregar fila
     $('#btnAgregarInt').on('click', function() {
-        var row = '<tr>' +
+        var $row = $('<tr>' +
             '<td><input type="text" name="int_denominacion[]" class="form-control form-control-sm" placeholder="Razón social" required></td>' +
             '<td><input type="text" name="int_cuit[]" class="form-control form-control-sm font-monospace" placeholder="CUIT" required></td>' +
             '<td><input type="number" step="0.01" name="int_porcentaje[]" class="form-control form-control-sm text-end input-ute-pct" value="0"></td>' +
-            '<td><select name="int_empresa_id[]" class="form-select form-select-sm sel-empresa">' + buildSelectHTML() + '</select></td>' +
+            '<td><select name="int_empresa_id[]" class="sel-empresa">' + buildSelectHTML() + '</select></td>' +
             '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger btn-borrar-int"><i class="bi bi-trash"></i></button></td>' +
-            '</tr>';
-        $('#tbodyUte').append(row);
+            '</tr>');
+        $('#tbodyUte').append($row);
+        initSelect2($row.find('.sel-empresa'));
     });
 
     // Borrar fila
@@ -220,15 +264,8 @@ $(function() {
         }
     });
 
-    // Al seleccionar empresa existente, autocompletar CUIT y denominación
-    $(document).on('change', '.sel-empresa', function() {
-        var $row = $(this).closest('tr');
-        var $opt = $(this).find('option:selected');
-        if ($opt.val()) {
-            $row.find('[name="int_cuit[]"]').val($opt.data('cuit'));
-            $row.find('[name="int_denominacion[]"]').val($opt.data('razon'));
-        }
-    });
+    // Inicializar Select2 en todas las filas existentes al cargar
+    $('.sel-empresa').each(function() { initSelect2($(this)); });
 
     // Total %
     function updateTotal() {

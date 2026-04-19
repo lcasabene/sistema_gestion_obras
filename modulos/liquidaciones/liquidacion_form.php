@@ -3,6 +3,11 @@
 require_once __DIR__ . '/../../auth/middleware.php';
 require_login();
 require_once __DIR__ . '/../../config/database.php';
+if (!file_exists(__DIR__ . '/includes/Rg830Engine.php')) {
+    http_response_code(500);
+    echo "<div class='alert alert-danger m-4'><strong>Error de configuración:</strong> No se encontró el archivo <code>includes/Rg830Engine.php</code>. Verifique que fue subido al servidor.</div>";
+    exit;
+}
 require_once __DIR__ . '/includes/Rg830Engine.php';
 include __DIR__ . '/../../public/_header.php';
 
@@ -292,11 +297,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Datos para selects
-$empresas = $pdo->query("SELECT id, razon_social, cuit, condicion_iva, ganancias_condicion FROM empresas WHERE activo=1 ORDER BY razon_social")->fetchAll();
-$obras = $pdo->query("SELECT id, denominacion FROM obras WHERE activo=1 ORDER BY denominacion")->fetchAll();
-$iibbCategorias = $pdo->query("SELECT * FROM iibb_categorias WHERE activo=1 ORDER BY orden, codigo")->fetchAll();
-$iibbMinimos = $pdo->query("SELECT * FROM iibb_minimos WHERE activo=1 ORDER BY tipo_agente")->fetchAll();
-$ganConceptos = $pdo->query("SELECT * FROM rg830_conceptos WHERE codigo='GANANCIAS' AND activo=1 ORDER BY inciso")->fetchAll();
+try { $empresas     = $pdo->query("SELECT id, razon_social, cuit, condicion_iva, ganancias_condicion FROM empresas WHERE activo=1 ORDER BY razon_social")->fetchAll(); } catch(Exception $e) { $empresas = []; }
+try { $obras         = $pdo->query("SELECT id, denominacion FROM obras WHERE activo=1 ORDER BY denominacion")->fetchAll(); } catch(Exception $e) { $obras = []; }
+try { $iibbCategorias = $pdo->query("SELECT * FROM iibb_categorias WHERE activo=1 ORDER BY orden, codigo")->fetchAll(); } catch(Exception $e) { $iibbCategorias = []; }
+try { $iibbMinimos    = $pdo->query("SELECT * FROM iibb_minimos WHERE activo=1 ORDER BY tipo_agente")->fetchAll(); } catch(Exception $e) { $iibbMinimos = []; }
+try { $ganConceptos   = $pdo->query("SELECT * FROM rg830_conceptos WHERE codigo='GANANCIAS' AND activo=1 ORDER BY inciso")->fetchAll(); } catch(Exception $e) { $ganConceptos = []; }
 
 function fmt($v) { return number_format((float)$v, 2, ',', '.'); }
 

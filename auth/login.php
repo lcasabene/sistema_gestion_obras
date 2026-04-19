@@ -1,12 +1,12 @@
 <?php
+require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/session_config.php';
 secure_session_start();
 
 if (!empty($_SESSION['user_id']) && is_session_valid()) {
-    header("Location: " . (defined('BASE_URL') ? BASE_URL : '') . "public/index.php");
+    header("Location: " . BASE_URL . "public/index.php");
     exit;
 }
-require_once __DIR__ . '/../config/config.php';
 ?>
 <!doctype html>
 <html lang="es">

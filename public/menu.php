@@ -114,7 +114,80 @@ function tiene_acceso_modulo($clave) {
 
     </div>
 
-    <!-- FILA 2: ARCA / SICOPRO / Configuración -->
+    <!-- FILA 2: Programas / Desembolsos / Rendiciones -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header fw-bold text-white" style="background:#198754">
+                    <i class="bi bi-diagram-3 me-2"></i>Programas – Desembolsos / Rendiciones / Saldos
+                </div>
+                <div class="row g-0">
+                    <div class="col-md-4">
+                        <div class="list-group list-group-flush border-end">
+                            <a href="../modulos/programas/dashboard.php" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-bar-chart-line me-2 text-warning"></i>Dashboard / Resumen</span>
+                                <span class="badge bg-warning text-dark">Dashboard</span>
+                            </a>
+                            <a href="../modulos/programas/index.php" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-grid-3x3-gap me-2 text-success"></i>Listado de Programas</span>
+                                <span class="badge bg-light text-dark border">Principal</span>
+                            </a>
+                            <a href="../modulos/programas/programa_form.php" class="list-group-item list-group-item-action">
+                                <i class="bi bi-plus-circle me-2 text-primary"></i>Nuevo Programa
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="list-group list-group-flush border-end">
+                            <div class="list-group-item bg-light py-1 px-3">
+                                <small class="text-muted fw-bold text-uppercase" style="font-size:.7rem">
+                                    <i class="bi bi-arrow-down-circle me-1"></i>Desembolsos / Rendiciones
+                                </small>
+                            </div>
+                            <a href="../modulos/programas/desembolsos_listado.php" class="list-group-item list-group-item-action">
+                                <i class="bi bi-cash-coin me-2 text-info"></i>Ver Desembolsos por Programa
+                            </a>
+                            <?php if (can_edit()): ?>
+                            <a href="../modulos/programas/desembolso_form.php" class="list-group-item list-group-item-action">
+                                <i class="bi bi-plus-circle me-2 text-info"></i>Nuevo Desembolso
+                            </a>
+                            <?php endif; ?>
+                            <a href="../modulos/programas/rendiciones_listado.php" class="list-group-item list-group-item-action">
+                                <i class="bi bi-clipboard-check me-2 text-warning"></i>Ver Rendiciones por Programa
+                            </a>
+                            <?php if (can_edit()): ?>
+                            <a href="../modulos/programas/rendicion_form.php" class="list-group-item list-group-item-action">
+                                <i class="bi bi-plus-circle me-2 text-warning"></i>Nueva Rendición
+                            </a>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="list-group list-group-flush">
+                            <div class="list-group-item bg-light py-1 px-3">
+                                <small class="text-muted fw-bold text-uppercase" style="font-size:.7rem">
+                                    <i class="bi bi-bank me-1"></i>Saldos / Pagos
+                                </small>
+                            </div>
+                            <a href="../modulos/programas/saldos_listado.php" class="list-group-item list-group-item-action">
+                                <i class="bi bi-bank me-2 text-primary"></i>Ver Saldos Bancarios
+                            </a>
+                            <?php if (can_edit()): ?>
+                            <a href="../modulos/programas/saldo_form.php" class="list-group-item list-group-item-action">
+                                <i class="bi bi-plus-circle me-2 text-primary"></i>Nuevo Saldo Bancario
+                            </a>
+                            <?php endif; ?>
+                            <a href="../modulos/programas/pagos_importar.php" class="list-group-item list-group-item-action">
+                                <i class="bi bi-upload me-2 text-secondary"></i>Importar Pagos (Excel/CSV)
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FILA 3: ARCA / SICOPRO / Configuración -->
     <div class="row g-4">
 
         <?php if (tiene_acceso_modulo('arca')): ?>
