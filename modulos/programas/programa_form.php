@@ -52,7 +52,10 @@ include __DIR__ . '/../../public/_header.php';
             <i class="bi bi-diagram-3 me-2 text-success"></i>
             <?= $id ? 'Editar Programa' : 'Nuevo Programa' ?>
         </h4>
-        <a href="index.php" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Volver</a>
+        <div class="d-flex gap-2">
+            <a href="index.php" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Volver</a>
+            <a href="../../public/menu.php" class="btn btn-outline-dark btn-sm"><i class="bi bi-house me-1"></i>Menú</a>
+        </div>
     </div>
 
     <?php if ($msg): [$tipo,$texto] = explode('|',$msg,2); ?>
@@ -63,7 +66,7 @@ include __DIR__ . '/../../public/_header.php';
         <div class="card-body">
             <form method="POST">
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Organismo Financiador <span class="text-danger">*</span></label>
+                    <label class="form-label fw-semibold">Banco Financiador <span class="text-danger">*</span></label>
                     <select name="organismo_id" class="form-select" required>
                         <option value="">-- Seleccionar --</option>
                         <?php foreach ($organismos as $o): ?>

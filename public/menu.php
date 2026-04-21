@@ -128,13 +128,19 @@ function tiene_acceso_modulo($clave) {
                                 <span><i class="bi bi-bar-chart-line me-2 text-warning"></i>Dashboard / Resumen</span>
                                 <span class="badge bg-warning text-dark">Dashboard</span>
                             </a>
+                            <a href="../modulos/programas/bancos_listado.php" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-bank2 me-2 text-info"></i>Bancos Financiadores</span>
+                                <span class="badge bg-info text-dark">BID / BM / CAF</span>
+                            </a>
                             <a href="../modulos/programas/index.php" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
                                 <span><i class="bi bi-grid-3x3-gap me-2 text-success"></i>Listado de Programas</span>
                                 <span class="badge bg-light text-dark border">Principal</span>
                             </a>
+                            <?php if (can_edit()): ?>
                             <a href="../modulos/programas/programa_form.php" class="list-group-item list-group-item-action">
                                 <i class="bi bi-plus-circle me-2 text-primary"></i>Nuevo Programa
                             </a>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <div class="col-md-4">

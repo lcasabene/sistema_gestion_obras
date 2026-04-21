@@ -32,6 +32,9 @@ include __DIR__ . '/../../public/_header.php';
             <a href="index.php" class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-grid me-1"></i>Ver Programas
             </a>
+            <a href="../../public/menu.php" class="btn btn-outline-dark btn-sm">
+                <i class="bi bi-house me-1"></i>Menú
+            </a>
         </div>
     </div>
 
@@ -41,7 +44,7 @@ include __DIR__ . '/../../public/_header.php';
                 <thead class="table-light">
                     <tr>
                         <th>Fecha</th>
-                        <th>Organismo</th>
+                        <th>Banco Financiador</th>
                         <th>Programa</th>
                         <th>Obra asociada</th>
                         <th>Banco / Cuenta</th>

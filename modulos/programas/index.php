@@ -21,7 +21,7 @@ $programas = $pdo->query("
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="mb-0 fw-bold"><i class="bi bi-diagram-3 me-2 text-success"></i>Programas</h2>
-            <small class="text-muted">Gestión de programas por organismo</small>
+            <small class="text-muted">Gestión de programas por banco financiador</small>
         </div>
         <div class="d-flex gap-2">
             <a href="../../public/menu.php" class="btn btn-outline-secondary btn-sm">
@@ -41,7 +41,7 @@ $programas = $pdo->query("
                 <table id="tablaPrograms" class="table table-hover table-bordered align-middle mb-0">
                     <thead class="table-dark">
                         <tr>
-                            <th>Organismo</th>
+                            <th>Banco Financiador</th>
                             <th>Código</th>
                             <th>Nombre del Programa</th>
                             <th>Moneda</th>

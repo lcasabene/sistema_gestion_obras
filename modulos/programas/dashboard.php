@@ -124,7 +124,7 @@ include __DIR__ . '/../../public/_header.php';
         </h4>
         <form class="d-flex gap-2 align-items-center" method="GET">
             <select name="organismo_id" class="form-select form-select-sm" style="min-width:220px" onchange="this.form.submit()">
-                <option value="">Todos los organismos</option>
+                <option value="">Todos los bancos financiadores</option>
                 <?php foreach ($organismos as $o): ?>
                 <option value="<?= $o['id'] ?>" <?= $o['id'] == $filtro_org ? 'selected':'' ?>>
                     <?= htmlspecialchars($o['nombre_organismo']) ?>
@@ -132,6 +132,9 @@ include __DIR__ . '/../../public/_header.php';
                 <?php endforeach; ?>
             </select>
             <a href="dashboard.php" class="btn btn-outline-secondary btn-sm">Limpiar</a>
+            <a href="../../public/menu.php" class="btn btn-outline-dark btn-sm">
+                <i class="bi bi-house me-1"></i>Menú
+            </a>
         </form>
     </div>
 
@@ -201,7 +204,7 @@ include __DIR__ . '/../../public/_header.php';
     <div class="card shadow-sm mb-4">
         <div class="card-header org-header d-flex justify-content-between align-items-center py-2">
             <span class="fw-semibold">
-                <i class="bi bi-building me-2"></i><?= htmlspecialchars($orgData['label']) ?>
+                <i class="bi bi-bank2 me-2"></i>Banco: <?= htmlspecialchars($orgData['label']) ?>
             </span>
             <span class="badge bg-secondary"><?= count($progs) ?> programa<?= count($progs)>1?'s':'' ?></span>
         </div>

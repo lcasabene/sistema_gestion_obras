@@ -59,7 +59,7 @@ include __DIR__ . '/../../public/_header.php';
                 <span class="badge bg-success ms-2"><?= htmlspecialchars($prog['codigo']) ?></span>
             </h4>
             <small class="text-muted">
-                <i class="bi bi-bank2 me-1"></i><?= htmlspecialchars($prog['nombre_organismo']) ?>
+                <i class="bi bi-bank2 me-1"></i><strong>Banco:</strong> <?= htmlspecialchars($prog['nombre_organismo']) ?>
                 &nbsp;|&nbsp;
                 <i class="bi bi-calendar me-1"></i>
                 <?= fmtF($prog['fecha_inicio']) ?> – <?= fmtF($prog['fecha_fin']) ?>
@@ -77,6 +77,9 @@ include __DIR__ . '/../../public/_header.php';
             <?php endif; ?>
             <a href="index.php" class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-arrow-left me-1"></i>Volver
+            </a>
+            <a href="../../public/menu.php" class="btn btn-outline-dark btn-sm">
+                <i class="bi bi-house me-1"></i>Menú
             </a>
         </div>
     </div>
