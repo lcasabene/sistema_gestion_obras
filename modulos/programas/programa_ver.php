@@ -20,9 +20,19 @@ $rendiciones = $pdo->prepare("SELECT r.*, u.nombre AS usuario_nombre, o.denomina
 $rendiciones->execute([$id]);
 $rendiciones = $rendiciones->fetchAll();
 
-$saldos = $pdo->prepare("SELECT s.*, u.nombre AS usuario_nombre, o.denominacion AS obra_nombre, o.codigo_interno AS obra_codigo FROM programa_saldos s LEFT JOIN usuarios u ON u.id=s.usuario_id LEFT JOIN obras o ON o.id=s.obra_id WHERE s.programa_id=? ORDER BY s.fecha DESC");
+$saldos = $pdo->prepare("SELECT s.*, u.nombre AS usuario_nombre, o.denominacion AS obra_nombre, o.codigo_interno AS obra_codigo,
+    c.banco AS cuenta_banco, c.nro_cuenta AS cuenta_nro, c.denominacion AS cuenta_denom, c.alias AS cuenta_alias
+    FROM programa_saldos s
+    LEFT JOIN usuarios u ON u.id=s.usuario_id
+    LEFT JOIN obras o ON o.id=s.obra_id
+    LEFT JOIN programa_cuentas c ON c.id=s.cuenta_id
+    WHERE s.programa_id=? ORDER BY s.fecha DESC");
 $saldos->execute([$id]);
 $saldos = $saldos->fetchAll();
+
+$cuentas = $pdo->prepare("SELECT * FROM programa_cuentas WHERE programa_id=? ORDER BY activa DESC, banco, denominacion");
+$cuentas->execute([$id]);
+$cuentas = $cuentas->fetchAll();
 
 // Cargar archivos agrupados por entidad
 $archivos = $pdo->prepare("SELECT * FROM programa_archivos WHERE programa_id=? ORDER BY entidad_tipo, entidad_id, created_at");
@@ -106,6 +116,12 @@ include __DIR__ . '/../../public/_header.php';
             </a>
         </li>
         <li class="nav-item">
+            <a class="nav-link" data-bs-toggle="tab" href="#tabCuentas">
+                <i class="bi bi-credit-card-2-front me-1 text-success"></i>Cuentas
+                <span class="badge bg-success ms-1"><?= count($cuentas) ?></span>
+            </a>
+        </li>
+        <li class="nav-item">
             <a class="nav-link" data-bs-toggle="tab" href="#tabSaldos">
                 <i class="bi bi-bank me-1 text-primary"></i>Saldos Bancarios
                 <span class="badge bg-primary ms-1"><?= count($saldos) ?></span>
@@ -139,6 +155,7 @@ include __DIR__ . '/../../public/_header.php';
                                 <th>Obra</th>
                                 <th class="text-end">Importe</th>
                                 <th>Moneda</th>
+                                <th>Nro. Doc.</th>
                                 <th>Observaciones</th>
                                 <th>Archivos</th>
                                 <th class="text-center">Acciones</th>
@@ -156,6 +173,7 @@ include __DIR__ . '/../../public/_header.php';
                                 </td>
                                 <td class="text-end font-monospace fw-bold"><?= fmtM($d['importe']) ?></td>
                                 <td><span class="badge bg-secondary"><?= $d['moneda'] ?></span></td>
+                                <td class="small font-monospace"><?= htmlspecialchars($d['numero_documento'] ?? '') ?: '<span class="text-muted">—</span>' ?></td>
                                 <td class="small text-muted"><?= htmlspecialchars($d['observaciones'] ?? '') ?></td>
                                 <td>
                                     <?= archivos_badge($archivos_map, 'DESEMBOLSO', $d['id']) ?>
@@ -195,7 +213,7 @@ include __DIR__ . '/../../public/_header.php';
                             <tr>
                                 <td colspan="2">TOTAL</td>
                                 <td class="text-end font-monospace text-success"><?= fmtM($totalDesemb) ?></td>
-                                <td colspan="4"></td>
+                                <td colspan="5"></td>
                             </tr>
                         </tfoot>
                         <?php endif; ?>
@@ -225,6 +243,7 @@ include __DIR__ . '/../../public/_header.php';
                                 <th class="text-end">Imp. Pesos</th>
                                 <th class="text-end">Fuente Externa</th>
                                 <th class="text-end">Contraparte</th>
+                                <th>Nro. Doc.</th>
                                 <th>Observaciones</th>
                                 <th>Archivos</th>
                                 <th class="text-center">Acciones</th>
@@ -248,6 +267,7 @@ include __DIR__ . '/../../public/_header.php';
                                 <td class="text-end font-monospace"><?= fmtM($r['importe_pesos']) ?></td>
                                 <td class="text-end font-monospace text-primary"><?= fmtM($r['total_fuente_externa']) ?></td>
                                 <td class="text-end font-monospace text-secondary"><?= fmtM($r['total_contraparte']) ?></td>
+                                <td class="small font-monospace"><?= htmlspecialchars($r['numero_documento'] ?? '') ?: '<span class="text-muted">—</span>' ?></td>
                                 <td class="small text-muted"><?= htmlspecialchars($r['observaciones'] ?? '') ?></td>
                                 <td>
                                     <?php if (can_edit()): ?>
@@ -289,10 +309,82 @@ include __DIR__ . '/../../public/_header.php';
                                 <td class="text-end font-monospace"><?= fmtM($tPesos) ?></td>
                                 <td class="text-end font-monospace text-primary"><?= fmtM($tFE) ?></td>
                                 <td class="text-end font-monospace text-secondary"><?= fmtM($tCP) ?></td>
-                                <td colspan="3"></td>
+                                <td colspan="4"></td>
                             </tr>
                         </tfoot>
                         <?php endif; ?>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== TAB CUENTAS BANCARIAS ===== -->
+        <div class="tab-pane fade" id="tabCuentas">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0">Cuentas Bancarias del Programa</h6>
+                <?php if (can_edit()): ?>
+                <a href="cuenta_form.php?programa_id=<?= $id ?>" class="btn btn-success btn-sm">
+                    <i class="bi bi-plus-lg me-1"></i>Nueva Cuenta
+                </a>
+                <?php endif; ?>
+            </div>
+            <?php if (($_GET['err'] ?? '') === 'tiene_saldos'): ?>
+            <div class="alert alert-warning py-2 small">No se puede eliminar una cuenta que tiene saldos cargados.</div>
+            <?php endif; ?>
+            <div class="card shadow-sm">
+                <div class="card-body p-0">
+                    <table id="tblCuentas" class="table table-hover table-sm mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Banco</th>
+                                <th>Denominación</th>
+                                <th>Nro. Cuenta</th>
+                                <th>CBU</th>
+                                <th>Alias</th>
+                                <th>Servicio Administrativo</th>
+                                <th>Moneda</th>
+                                <th class="text-center">Estado</th>
+                                <th class="text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($cuentas as $c): ?>
+                            <tr class="<?= $c['activa'] ? '' : 'text-muted' ?>">
+                                <td class="fw-semibold"><?= htmlspecialchars($c['banco']) ?></td>
+                                <td class="small"><?= htmlspecialchars($c['denominacion'] ?? '') ?: '<span class="text-muted">—</span>' ?></td>
+                                <td class="font-monospace small"><?= htmlspecialchars($c['nro_cuenta'] ?? '') ?: '<span class="text-muted">—</span>' ?></td>
+                                <td class="font-monospace small"><?= htmlspecialchars($c['cbu'] ?? '') ?: '<span class="text-muted">—</span>' ?></td>
+                                <td class="small"><?= htmlspecialchars($c['alias'] ?? '') ?: '<span class="text-muted">—</span>' ?></td>
+                                <td class="small"><?= htmlspecialchars($c['servicio_administrativo'] ?? '') ?: '<span class="text-muted">—</span>' ?></td>
+                                <td><span class="badge bg-secondary"><?= $c['moneda'] ?></span></td>
+                                <td class="text-center">
+                                    <?php if ($c['activa']): ?>
+                                    <span class="badge bg-success">Activa</span>
+                                    <?php else: ?>
+                                    <span class="badge bg-secondary">Inactiva</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="text-center">
+                                    <?php if (can_edit()): ?>
+                                    <a href="cuenta_form.php?id=<?= $c['id'] ?>&programa_id=<?= $id ?>" class="btn btn-outline-primary btn-sm py-0 px-1"><i class="bi bi-pencil"></i></a>
+                                    <?php endif; ?>
+                                    <?php if (can_delete()): ?>
+                                    <a href="cuenta_eliminar.php?id=<?= $c['id'] ?>&programa_id=<?= $id ?>"
+                                       class="btn btn-outline-danger btn-sm py-0 px-1"
+                                       onclick="return confirm('¿Eliminar cuenta?')"><i class="bi bi-trash"></i></a>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                            <?php if (!$cuentas): ?>
+                            <tr><td colspan="9" class="text-center text-muted py-3">
+                                No hay cuentas registradas para este programa.
+                                <?php if (can_edit()): ?>
+                                <a href="cuenta_form.php?programa_id=<?= $id ?>" class="ms-2">Crear la primera</a>
+                                <?php endif; ?>
+                            </td></tr>
+                            <?php endif; ?>
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -314,11 +406,11 @@ include __DIR__ . '/../../public/_header.php';
                         <thead class="table-light">
                             <tr>
                                 <th>Fecha</th>
-                                <th>Obra</th>
                                 <th>Banco / Cuenta</th>
                                 <th class="text-end">Saldo Moneda Ext.</th>
                                 <th>Moneda</th>
                                 <th class="text-end">Saldo Pesos</th>
+                                <th>Nro. Extracto</th>
                                 <th>Observaciones</th>
                                 <th>Archivos</th>
                                 <th class="text-center">Acciones</th>
@@ -329,18 +421,19 @@ include __DIR__ . '/../../public/_header.php';
                             <tr>
                                 <td><?= fmtF($s['fecha']) ?></td>
                                 <td class="small">
-                                    <?php if ($s['obra_nombre']): ?>
-                                    <span class="text-primary fw-semibold"><?= htmlspecialchars($s['obra_nombre']) ?></span>
-                                    <?php if ($s['obra_codigo']): ?><br><small class="text-muted"><?= htmlspecialchars($s['obra_codigo']) ?></small><?php endif; ?>
-                                    <?php else: ?><span class="text-muted">—</span><?php endif; ?>
-                                </td>
-                                <td class="small">
-                                    <?= htmlspecialchars($s['banco'] ?? '') ?>
-                                    <?php if ($s['cuenta']): ?><br><span class="text-muted"><?= htmlspecialchars($s['cuenta']) ?></span><?php endif; ?>
+                                    <?php
+                                    $bancoMostrar = $s['cuenta_banco'] ?? $s['banco'] ?? '';
+                                    $cuentaMostrar = $s['cuenta_nro'] ?? $s['cuenta'] ?? '';
+                                    $denomMostrar = $s['cuenta_denom'] ?? '';
+                                    ?>
+                                    <?= htmlspecialchars($bancoMostrar) ?>
+                                    <?php if ($denomMostrar): ?><br><span class="text-muted"><?= htmlspecialchars($denomMostrar) ?></span><?php endif; ?>
+                                    <?php if ($cuentaMostrar): ?><br><span class="text-muted font-monospace"><?= htmlspecialchars($cuentaMostrar) ?></span><?php endif; ?>
                                 </td>
                                 <td class="text-end font-monospace fw-bold text-info"><?= fmtM($s['saldo_moneda_extranjera']) ?></td>
                                 <td><span class="badge bg-secondary"><?= $s['moneda_extranjera'] ?></span></td>
                                 <td class="text-end font-monospace fw-bold text-success"><?= fmtM($s['saldo_moneda_nacional']) ?></td>
+                                <td class="small font-monospace"><?= htmlspecialchars($s['numero_extracto'] ?? '') ?: '<span class="text-muted">—</span>' ?></td>
                                 <td class="small text-muted"><?= htmlspecialchars($s['observaciones'] ?? '') ?></td>
                                 <td>
                                     <?php if (can_edit()): ?>
@@ -416,56 +509,271 @@ include __DIR__ . '/../../public/_header.php';
             </div>
             <?php endif; ?>
 
-            <div class="card shadow-sm">
-                <div class="card-body p-0">
-                    <?php
-                    $pagos = $pdo->prepare("SELECT id, lote_id, col_fecha, col_concepto, col_importe, col_moneda, col_referencia, datos_extra, import_fecha FROM programa_pagos_importados WHERE programa_id=? ORDER BY lote_id, fila");
-                    $pagos->execute([$id]);
-                    $pagos = $pagos->fetchAll();
-                    ?>
-                    <table id="tblPagos" class="table table-hover table-sm mb-0" style="font-size:.8rem">
+            <?php
+            $pagos = $pdo->prepare("SELECT id, lote_id, col_fecha, col_concepto, col_importe, col_moneda, col_referencia, datos_extra, import_fecha FROM programa_pagos_importados WHERE programa_id=? ORDER BY lote_id, fila");
+            $pagos->execute([$id]);
+            $pagos = $pagos->fetchAll();
+
+            // Helpers compartidos (tambien usados en la tabla)
+            // Normaliza: minusculas + quita acentos + deja solo a-z 0-9 (elimina espacios, _, ., -, NBSP, BOM, etc)
+            $normKey = function(string $k): string {
+                $k = strtolower(trim($k));
+                $k = strtr($k, [
+                    'á'=>'a','é'=>'e','í'=>'i','ó'=>'o','ú'=>'u','ü'=>'u','ñ'=>'n',
+                    'Á'=>'a','É'=>'e','Í'=>'i','Ó'=>'o','Ú'=>'u','Ü'=>'u','Ñ'=>'n',
+                ]);
+                return preg_replace('/[^a-z0-9]+/', '', $k);
+            };
+            $parseImp = function(string $v): ?float {
+                $s = trim($v);
+                if ($s === '') return null;
+                if (preg_match('/,\d{1,2}$/', $s)) {
+                    $s = str_replace('.', '', $s);
+                    $s = str_replace(',', '.', $s);
+                } else {
+                    $s = str_replace(',', '', $s);
+                }
+                return is_numeric($s) ? (float)$s : null;
+            };
+            $parseFechaExcel = function(string $v): ?int {
+                $v = trim($v);
+                if ($v === '') return null;
+                if (preg_match('/^\d{4,6}(\.\d+)?$/', $v)) {
+                    $n = (float)$v;
+                    if ($n >= 18000 && $n <= 80000) return (int)(($n - 25569) * 86400);
+                }
+                $ts = strtotime($v);
+                return $ts ?: null;
+            };
+
+            // Calcular totales, última AP, desglose por fuente y por AP/fufi
+            $totalDivisa = 0.0;
+            $ultimaAP = null;
+            $ultimaAPFecha = null;
+            $porFuente = [];       // [fuente => total_divisa]
+            $porAP = [];           // [ap_desc => ['fufis' => [fufi => total], 'total' => total]]
+            foreach ($pagos as $p) {
+                $ex = json_decode($p['datos_extra'] ?? '{}', true) ?: [];
+                $idx = [];
+                foreach ($ex as $k => $v) { $idx[$normKey($k)] = (string)$v; }
+
+                $imp = $parseImp($idx[$normKey('Importe_Divisa')] ?? '');
+                if ($imp !== null) $totalDivisa += $imp;
+
+                // Desglose por Fuente
+                if ($imp !== null) {
+                    $fuente = trim($idx[$normKey('Fuente')] ?? '') ?: '(sin fuente)';
+                    $porFuente[$fuente] = ($porFuente[$fuente] ?? 0) + $imp;
+                }
+
+                // Desglose por AP Descripción + Fuente
+                if ($imp !== null) {
+                    $apDesc   = trim($idx[$normKey('AP_Descripcion')] ?? '') ?: '(sin AP)';
+                    $fuenteAP = trim($idx[$normKey('Fuente')] ?? '') ?: '(sin fuente)';
+                    if (!isset($porAP[$apDesc])) $porAP[$apDesc] = ['fuentes' => [], 'total' => 0.0];
+                    $porAP[$apDesc]['fuentes'][$fuenteAP] = ($porAP[$apDesc]['fuentes'][$fuenteAP] ?? 0) + $imp;
+                    $porAP[$apDesc]['total'] += $imp;
+                }
+
+                // Última AP (por Codigo_Habilitado)
+                $ap = trim($idx[$normKey('Codigo_Habilitado')] ?? '');
+                $fechaRaw = $idx[$normKey('Fecha_Retiro_Pago')] ?? ($idx[$normKey('Fecha_de_Pesificacion')] ?? ($p['col_fecha'] ?? ''));
+                $ts = $parseFechaExcel((string)$fechaRaw);
+                if ($ap !== '' && $ts !== null && ($ultimaAPFecha === null || $ts > $ultimaAPFecha)) {
+                    $ultimaAPFecha = $ts;
+                    $ultimaAP = $ap;
+                }
+            }
+            // Ordenar desgloses por total descendente
+            arsort($porFuente);
+            uasort($porAP, fn($a, $b) => $b['total'] <=> $a['total']);
+            ?>
+
+            <!-- Resumen de pagos -->
+            <div class="row g-2 mb-3">
+                <div class="col-md-5">
+                    <div class="card shadow-sm border-start border-success border-4 h-100">
+                        <div class="card-body py-2 px-3">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <div class="text-muted small text-uppercase fw-bold">Total Importe Divisa</div>
+                                    <div class="fw-bold fs-5 text-success font-monospace">
+                                        <?= number_format($totalDivisa, 2, ',', '.') ?>
+                                    </div>
+                                </div>
+                                <small class="text-muted"><?= count($pagos) ?> pagos</small>
+                            </div>
+                            <?php if (!empty($porFuente)): ?>
+                            <hr class="my-2">
+                            <div class="small">
+                                <div class="text-muted text-uppercase fw-bold mb-1" style="font-size:.65rem">Desglose por fuente</div>
+                                <?php foreach ($porFuente as $fuente => $tot): ?>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-truncate" style="max-width:60%" title="<?= htmlspecialchars($fuente) ?>"><?= htmlspecialchars($fuente) ?></span>
+                                    <span class="font-monospace fw-semibold"><?= number_format($tot, 2, ',', '.') ?></span>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card shadow-sm border-start border-primary border-4 h-100">
+                        <div class="card-body py-2 px-3">
+                            <div class="text-muted small text-uppercase fw-bold">Última AP</div>
+                            <div class="fw-bold text-primary" style="word-break:break-word">
+                                <?= $ultimaAP ? htmlspecialchars($ultimaAP) : '<span class="text-muted fw-normal">Sin datos</span>' ?>
+                            </div>
+                            <?php if ($ultimaAPFecha): ?>
+                            <small class="text-muted"><i class="bi bi-calendar3 me-1"></i><?= date('d/m/Y', $ultimaAPFecha) ?></small>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card shadow-sm border-start border-warning border-4 h-100">
+                        <div class="card-body py-2 px-3 d-flex flex-column justify-content-center">
+                            <div class="text-muted small text-uppercase fw-bold mb-2">Totales por AP</div>
+                            <button type="button" class="btn btn-warning btn-sm fw-semibold"
+                                    data-bs-toggle="modal" data-bs-target="#modalTotalesAP">
+                                <i class="bi bi-table me-1"></i>Ver totales AP / Fuente
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal: Totales por AP Descripción separados por FUFI -->
+            <div class="modal fade" id="modalTotalesAP" tabindex="-1">
+                <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                    <div class="modal-content">
+                        <div class="modal-header py-2">
+                            <h6 class="modal-title fw-bold">
+                                <i class="bi bi-calculator me-2"></i>Totales por AP Descripción / Fuente (Importe Divisa)
+                            </h6>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body p-2">
+                            <table class="table table-sm table-bordered small mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>AP Descripción</th>
+                                        <th>Fuente</th>
+                                        <th class="text-end">Importe Divisa</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($porAP as $apDesc => $info): ?>
+                                        <?php $rowspan = count($info['fuentes']); $first = true; ?>
+                                        <?php foreach ($info['fuentes'] as $fuenteAP => $tot): ?>
+                                        <tr>
+                                            <?php if ($first): ?>
+                                            <td rowspan="<?= $rowspan ?>" class="align-middle fw-semibold" style="word-break:break-word">
+                                                <?= htmlspecialchars($apDesc) ?>
+                                            </td>
+                                            <?php endif; ?>
+                                            <td class="small"><?= htmlspecialchars($fuenteAP) ?></td>
+                                            <td class="text-end font-monospace"><?= number_format($tot, 2, ',', '.') ?></td>
+                                        </tr>
+                                        <?php $first = false; endforeach; ?>
+                                        <tr class="table-light">
+                                            <td colspan="2" class="text-end fw-bold">Subtotal <?= htmlspecialchars($apDesc) ?></td>
+                                            <td class="text-end font-monospace fw-bold text-primary"><?= number_format($info['total'], 2, ',', '.') ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                                <tfoot>
+                                    <tr class="table-success">
+                                        <td colspan="2" class="text-end fw-bold">TOTAL GENERAL</td>
+                                        <td class="text-end font-monospace fw-bold fs-6"><?= number_format($totalDivisa, 2, ',', '.') ?></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm" style="max-width:100%;overflow:hidden">
+                <div class="card-body p-0" style="max-width:100%;overflow-x:auto">
+                    <table id="tblPagos" class="table table-hover table-sm mb-0" style="font-size:.8rem;width:100%">
                         <thead class="table-dark">
                             <tr>
                                 <th class="text-nowrap">Fecha</th>
                                 <th class="text-nowrap">Cod.Hab.</th>
-                                <th class="text-nowrap">R.Letra</th>
-                                <th class="text-nowrap">R.Suc.</th>
                                 <th class="text-nowrap">Nombre</th>
                                 <th class="text-nowrap">CUIT</th>
                                 <th class="text-nowrap text-end">Imp.Pagado</th>
                                 <th class="text-nowrap">AP Descripción</th>
                                 <th class="text-nowrap">Descripción</th>
+                                <th class="text-nowrap">Tema</th>
+                                <th class="text-nowrap">Insumo</th>
                                 <th class="text-nowrap text-end">Imp.Divisa</th>
                                 <th class="text-nowrap text-end">Imp.PNUD</th>
                                 <th class="text-nowrap">F.Pesificación</th>
                                 <th class="text-nowrap">F.Retiro</th>
-                                <th class="text-nowrap">Estado Rendido</th>
                                 <th class="text-nowrap text-center">Detalle</th>
                             </tr>
                         </thead>
                         <tbody>
+                            <?php
+                            // $normKey ya esta definido arriba (helpers compartidos)
+                            // Formatea fechas: soporta serial de Excel (ej: 45658 → 01/01/2025) y strings de fecha
+                            $fmtFecha = function(string $v): string {
+                                $v = trim($v);
+                                if ($v === '') return '';
+                                // Serial numérico de Excel: rango razonable para fechas (1950-2100)
+                                if (preg_match('/^\d{4,6}(\.\d+)?$/', $v)) {
+                                    $n = (float)$v;
+                                    if ($n >= 18000 && $n <= 80000) {
+                                        // Excel cuenta días desde 1900-01-01 con bug del bisiesto. 25569 = epoch UNIX
+                                        $ts = ($n - 25569) * 86400;
+                                        return date('d/m/Y', (int)$ts);
+                                    }
+                                }
+                                // Si ya es fecha con formato, devolver tal cual (escapado)
+                                return htmlspecialchars($v);
+                            };
+                            // Formatea importe al estilo argentino: miles con "." y decimales con ","
+                            $fmtImp = function(string $v): string {
+                                if ($v === '' || $v === null) return '';
+                                // Limpiar: quitar separadores de miles y unificar decimal
+                                $s = trim($v);
+                                // Si tiene coma como decimal (formato AR): quitar puntos y cambiar coma por punto
+                                if (preg_match('/,\d{1,2}$/', $s)) {
+                                    $s = str_replace('.', '', $s);
+                                    $s = str_replace(',', '.', $s);
+                                } else {
+                                    // Formato con punto decimal o sin decimales: solo quitar comas de miles
+                                    $s = str_replace(',', '', $s);
+                                }
+                                if (!is_numeric($s)) return htmlspecialchars($v);
+                                return number_format((float)$s, 2, ',', '.');
+                            };
+                            ?>
                             <?php foreach ($pagos as $p):
                                 $ex = json_decode($p['datos_extra'] ?? '{}', true) ?: [];
-                                // Índice case-insensitive sin espacios para tolerar variaciones de cabecera
                                 $exIdx = [];
-                                foreach ($ex as $k => $v) { $exIdx[strtolower(trim($k))] = (string)$v; }
-                                $esc = fn($k) => htmlspecialchars($exIdx[strtolower(trim($k))] ?? '');
+                                foreach ($ex as $k => $v) { $exIdx[$normKey($k)] = (string)$v; }
+                                $esc = fn($k) => htmlspecialchars($exIdx[$normKey($k)] ?? '');
+                                $escImp = fn($k) => $fmtImp($exIdx[$normKey($k)] ?? '');
+                                $escFecha = fn($k) => $fmtFecha($exIdx[$normKey($k)] ?? '');
                             ?>
                             <tr>
                                 <td class="text-nowrap"><?= htmlspecialchars($p['col_fecha'] ?? '') ?></td>
                                 <td class="text-nowrap"><?= $esc('Codigo_Habilitado') ?></td>
-                                <td><?= $esc('Doc_R_Letra') ?></td>
-                                <td><?= $esc('Doc_R_Sucursal') ?></td>
                                 <td><?= $esc('Nombre') ?></td>
                                 <td class="text-nowrap font-monospace small"><?= $esc('Cuit') ?></td>
-                                <td class="text-end font-monospace fw-bold"><?= $esc('Importe_Pagado') ?></td>
+                                <td class="text-end font-monospace fw-bold"><?= $escImp('Importe_Pagado') ?></td>
                                 <td class="small"><?= $esc('AP_Descripcion') ?></td>
                                 <td class="small"><?= $esc('Descripcion') ?></td>
-                                <td class="text-end font-monospace"><?= $esc('Importe_Divisa') ?></td>
-                                <td class="text-end font-monospace"><?= $esc('ImportePNUD') ?></td>
-                                <td class="text-nowrap"><?= $esc('Fecha_de_Pesificacion') ?></td>
-                                <td class="text-nowrap"><?= $esc('Fecha_Retiro_Pago') ?></td>
-                                <td><?= $esc('Estado_Rendido') ?></td>
+                                <td class="small"><?= $esc('Tema') ?></td>
+                                <td class="small"><?= $esc('Insumo_Descripcion') ?: $esc('Insumo') ?></td>
+                                <td class="text-end font-monospace"><?= $escImp('Importe_Divisa') ?></td>
+                                <td class="text-end font-monospace"><?= $escImp('ImportePNUD') ?></td>
+                                <td class="text-nowrap"><?= $escFecha('Fecha_de_Pesificacion') ?></td>
+                                <td class="text-nowrap"><?= $escFecha('Fecha_Retiro_Pago') ?></td>
                                 <td class="text-center">
                                     <button type="button" class="btn btn-outline-info btn-sm py-0 px-1 btn-detalle"
                                             data-extra="<?= htmlspecialchars($p['datos_extra'] ?? '{}') ?>"
@@ -518,13 +826,13 @@ $(function(){
         pageLength: 25,
         dom: '<"d-flex justify-content-between"lf>t<"d-flex justify-content-between"ip>'
     };
-    $('#tblDesemb').DataTable(Object.assign({}, dtOpts, { order:[[0,'desc']], columnDefs:[{orderable:false,targets:[4,5]}] }));
-    $('#tblRend').DataTable(Object.assign({}, dtOpts, { order:[[0,'desc']], columnDefs:[{orderable:false,targets:[6,7]}] }));
+    $('#tblDesemb').DataTable(Object.assign({}, dtOpts, { order:[[0,'desc']], columnDefs:[{orderable:false,targets:[5,6]}] }));
+    $('#tblRend').DataTable(Object.assign({}, dtOpts, { order:[[0,'desc']], columnDefs:[{orderable:false,targets:[7,8]}] }));
     $('#tblSaldos').DataTable(Object.assign({}, dtOpts, { order:[[0,'desc']], columnDefs:[{orderable:false,targets:[6,7]}] }));
-    $('#tblPagos').DataTable(Object.assign({}, dtOpts, {
+    var dtPagos = $('#tblPagos').DataTable(Object.assign({}, dtOpts, {
         order:[[0,'desc']],
         scrollX: true,
-        columnDefs:[{orderable:false, targets:[14]}],
+        columnDefs:[{orderable:false, targets:[13]}],
         buttons:[{
             extend: 'excelHtml5',
             text: '<i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel',
@@ -534,6 +842,51 @@ $(function(){
         }],
         dom: '<"d-flex justify-content-between align-items-center mb-2"Bf>t<"d-flex justify-content-between"ip>'
     }));
+
+    // Recalcular anchos de la tabla de Pagos al mostrar su tab (evita desalineación con scrollX)
+    $('a[href="#tabPagos"]').on('shown.bs.tab', function(){
+        dtPagos.columns.adjust();
+    });
+    // Si se carga directo con #tabPagos en el hash, ajustar también
+    if (window.location.hash === '#tabPagos') {
+        setTimeout(function(){ dtPagos.columns.adjust(); }, 100);
+    }
+
+    // Helpers de formato para el modal de detalle
+    function normalizeKey(k){
+        return (k || '').toString().toLowerCase()
+            .replace(/[áä]/g,'a').replace(/[éë]/g,'e').replace(/[íï]/g,'i')
+            .replace(/[óö]/g,'o').replace(/[úü]/g,'u').replace(/ñ/g,'n')
+            .replace(/[^a-z0-9]+/g,'');
+    }
+    function fmtImporteAR(v){
+        var s = (v == null ? '' : String(v)).trim();
+        if (s === '') return '';
+        if (/,\d{1,2}$/.test(s)) { s = s.replace(/\./g,'').replace(',', '.'); }
+        else { s = s.replace(/,/g,''); }
+        var n = parseFloat(s);
+        if (isNaN(n)) return null;
+        return n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function fmtFechaExcel(v){
+        var s = (v == null ? '' : String(v)).trim();
+        if (s === '') return '';
+        if (/^\d{4,6}(\.\d+)?$/.test(s)) {
+            var n = parseFloat(s);
+            if (n >= 18000 && n <= 80000) {
+                var ms = (n - 25569) * 86400 * 1000;
+                var d = new Date(ms);
+                var dd = String(d.getUTCDate()).padStart(2,'0');
+                var mm = String(d.getUTCMonth()+1).padStart(2,'0');
+                var yy = d.getUTCFullYear();
+                return dd + '/' + mm + '/' + yy;
+            }
+        }
+        return null;
+    }
+    // Claves que se tratan como importe/fecha
+    var KEYS_IMPORTE = ['importepagado','importedivisa','importepnud','importe'];
+    var KEYS_FECHA   = ['fechadepesificacion','fecharetiropago','fecha','fechapago','docrfecha'];
 
     // Modal detalle pago
     $(document).on('click', '.btn-detalle', function(){
@@ -545,10 +898,25 @@ $(function(){
         $.each(extra, function(k, v){
             count++;
             var isEmpty = (v === '' || v === null);
+            var display = v;
+            var cellClass = 'small';
+            if (!isEmpty) {
+                var nk = normalizeKey(k);
+                // Intentar formato de fecha si la clave sugiere fecha
+                if (KEYS_FECHA.indexOf(nk) !== -1 || nk.indexOf('fecha') !== -1) {
+                    var f = fmtFechaExcel(v);
+                    if (f !== null) { display = f; cellClass += ' text-nowrap'; }
+                }
+                // Intentar formato de importe si la clave sugiere importe
+                else if (KEYS_IMPORTE.indexOf(nk) !== -1 || nk.indexOf('importe') !== -1) {
+                    var imp = fmtImporteAR(v);
+                    if (imp !== null) { display = imp; cellClass += ' text-end font-monospace'; }
+                }
+            }
             tbody.append(
                 '<tr class="' + (isEmpty ? 'text-muted' : '') + '">' +
                 '<td class="fw-semibold text-nowrap small">' + $('<span>').text(k).html() + '</td>' +
-                '<td class="small">' + (isEmpty ? '<em>vacío</em>' : $('<span>').text(v).html()) + '</td>' +
+                '<td class="' + cellClass + '">' + (isEmpty ? '<em>vacío</em>' : $('<span>').text(display).html()) + '</td>' +
                 '</tr>'
             );
         });

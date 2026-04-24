@@ -9,7 +9,9 @@ $programas = $pdo->query("
            (SELECT COUNT(*) FROM programa_desembolsos WHERE programa_id=p.id) AS cant_desembolsos,
            (SELECT COUNT(*) FROM programa_rendiciones WHERE programa_id=p.id) AS cant_rendiciones,
            (SELECT COUNT(*) FROM programa_saldos WHERE programa_id=p.id)      AS cant_saldos,
-           (SELECT COALESCE(SUM(importe),0) FROM programa_desembolsos WHERE programa_id=p.id) AS total_desembolsado
+           (SELECT COALESCE(SUM(importe),0) FROM programa_desembolsos WHERE programa_id=p.id) AS total_desembolsado,
+           (SELECT COALESCE(SUM(importe_usd),0) FROM programa_rendiciones WHERE programa_id=p.id) AS total_rendido_usd,
+           (SELECT COALESCE(SUM(importe_pesos),0) FROM programa_rendiciones WHERE programa_id=p.id) AS total_rendido_pesos
     FROM programas p
     JOIN organismos_financiadores o ON o.id = p.organismo_id
     WHERE p.activo = 1
@@ -47,6 +49,7 @@ $programas = $pdo->query("
                             <th>Moneda</th>
                             <th class="text-end">Monto Total</th>
                             <th class="text-end">Total Desembolsado</th>
+                            <th class="text-end">Total Rendido</th>
                             <th class="text-center">Desemb.</th>
                             <th class="text-center">Rend.</th>
                             <th class="text-center">Saldos</th>
@@ -62,6 +65,17 @@ $programas = $pdo->query("
                             <td class="text-center"><span class="badge bg-secondary"><?= $p['moneda'] ?></span></td>
                             <td class="text-end font-monospace"><?= $p['monto_total'] > 0 ? number_format($p['monto_total'], 2, ',', '.') : '-' ?></td>
                             <td class="text-end font-monospace text-success fw-bold"><?= number_format($p['total_desembolsado'], 2, ',', '.') ?></td>
+                            <td class="text-end font-monospace text-warning fw-bold">
+                                <?php
+                                $tr = $p['total_rendido_usd'] + $p['total_rendido_pesos'];
+                                if ($tr > 0) {
+                                    $parts = [];
+                                    if ($p['total_rendido_usd']   > 0) $parts[] = 'USD ' . number_format($p['total_rendido_usd'], 2, ',', '.');
+                                    if ($p['total_rendido_pesos'] > 0) $parts[] = 'ARS ' . number_format($p['total_rendido_pesos'], 2, ',', '.');
+                                    echo implode('<br>', $parts);
+                                } else { echo '0,00'; }
+                                ?>
+                            </td>
                             <td class="text-center"><span class="badge bg-info text-dark"><?= $p['cant_desembolsos'] ?></span></td>
                             <td class="text-center"><span class="badge bg-warning text-dark"><?= $p['cant_rendiciones'] ?></span></td>
                             <td class="text-center"><span class="badge bg-primary"><?= $p['cant_saldos'] ?></span></td>
@@ -102,7 +116,7 @@ $(function(){
         language: { url: '//cdn.datatables.net/plug-ins/1.13.8/i18n/es-ES.json' },
         order: [[0,'asc'],[2,'asc']],
         pageLength: 25,
-        columnDefs: [{ orderable: false, targets: 9 }]
+        columnDefs: [{ orderable: false, targets: 10 }]
     });
 });
 </script>
